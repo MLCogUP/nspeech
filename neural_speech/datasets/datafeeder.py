@@ -121,7 +121,12 @@ class DataFeeder(object):
         meta = self._metadata[self._offset]
         self._offset += 1
 
-        wav_fn, spectrogram_fn, mel_fn, n_frames, text, speaker_id = meta
+        # TODO: remove work around for old data files
+        if len(meta) == 6:
+            wav_fn, spectrogram_fn, mel_fn, n_frames, text, speaker_id = meta
+        else:
+            wav_fn, spectrogram_fn, mel_fn, n_frames, text = meta
+            speaker_id = 1
 
         if self._cmudict and random.random() < _p_cmudict:
             text = ' '.join([self._maybe_get_arpabet(word) for word in text.split(' ')])
@@ -129,7 +134,7 @@ class DataFeeder(object):
         input_data = np.asarray(text_to_sequence(text, self._cleaner_names), dtype=np.int32)
         linear_target = np.load(os.path.join(self._datadir, spectrogram_fn))
         mel_target = np.load(os.path.join(self._datadir, mel_fn))
-        return input_data, mel_target, linear_target, len(linear_target)
+        return input_data, speaker_id, mel_target, linear_target, len(linear_target)
 
     def _maybe_get_arpabet(self, word):
         arpabet = self._cmudict.lookup(word)
@@ -138,11 +143,12 @@ class DataFeeder(object):
 
 def _prepare_batch(batch, outputs_per_step):
     random.shuffle(batch)
-    inputs = _prepare_inputs([x[3] for x in batch])
-    input_lengths = np.asarray([len(x[3]) for x in batch], dtype=np.int32)
+    inputs = _prepare_inputs([x[0] for x in batch])
+    input_lengths = np.asarray([len(x[0]) for x in batch], dtype=np.int32)
+    speaker_ids = _prepare_inputs([x[1] for x in batch])
     mel_targets = _prepare_targets([x[2] for x in batch], outputs_per_step)
-    linear_targets = _prepare_targets([x[1] for x in batch], outputs_per_step)
-    return inputs, input_lengths, mel_targets, linear_targets
+    linear_targets = _prepare_targets([x[3] for x in batch], outputs_per_step)
+    return inputs, input_lengths, speaker_ids, mel_targets, linear_targets
 
 
 def _prepare_inputs(inputs):
