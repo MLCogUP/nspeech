@@ -12,7 +12,7 @@ class Tacotron():
     def __init__(self, hparams):
         self._hparams = hparams
 
-    def initialize(self, inputs, input_lengths, mel_targets=None, linear_targets=None):
+    def initialize(self, text_inputs, input_lengths, speaker_ids, mel_targets=None, linear_targets=None):
         '''Initializes the model for inference.
 
         Sets "mel_outputs", "linear_outputs", and "alignments" fields.
@@ -22,6 +22,7 @@ class Tacotron():
             steps in the input time series, and values are character IDs
           input_lengths: int32 Tensor with shape [N] where N is batch size and values are the lengths
             of each sequence in inputs.
+          speaker_ids: int32 Tensor containing ids of specific speakers
           mel_targets: float32 Tensor with shape [N, T_out, M] where N is batch size, T_out is number
             of steps in the output time series, M is num_mels, and values are entries in the mel
             spectrogram. Only needed for training.
@@ -31,21 +32,38 @@ class Tacotron():
         '''
         with tf.variable_scope('inference'):
             is_training = linear_targets is not None
-            batch_size = tf.shape(inputs)[0]
+            batch_size = tf.shape(text_inputs)[0]
             hp = self._hparams
             vocab_size = len(symbols)
-            embedded_inputs = embedding(inputs, vocab_size, hp.embedding_dim)
+            embedded_inputs = embedding(text_inputs, vocab_size, hp.embedding_dim)
 
             # extract speaker embedding if multi-speaker
             with tf.variable_scope('speaker'):
                 if hp.num_speakers > 1:
-                    speaker_id = inputs['speaker']
+                    speaker_id = speaker_ids
                     speaker_embed = tf.get_variable('speaker_embed',
                                                     shape=(hp.num_speakers, hp.speaker_embed_dim),
                                                     dtype=tf.float32)
+                    # TODO: what about special initializer=tf.truncated_normal_initializer(stddev=0.5)?
                     speaker_embed = tf.nn.embedding_lookup(speaker_embed, speaker_id)
+                    embedded_inputs = tf.concat([embedded_inputs, speaker_embed], axis=-1)  # [N, T_in, 512]
+                    # TODO: what are the hp values for rnn init?
+                    before_highway = tf.layers.dense(speaker_embed, hp.enc_prenet_sizes[-1], activation=tf.nn.softsign)
+                    encoder_rnn_init_state = tf.layers.dense(speaker_embed, hp.enc_rnn_size * 2,
+                                                             activation=tf.nn.softsign)
+
+                    attention_rnn_init_state = tf.layers.dense(speaker_embed, hp.attention_state_size,
+                                                               activation=tf.nn.softsign)
+                    decoder_rnn_init_states = [
+                        tf.layers.dense(speaker_embed, hp.dec_rnn_size, activation=tf.nn.softsign) for _ in
+                        range(hp.dec_layer_num)]
+
                 else:
                     speaker_embed = None
+                    before_highway = None
+                    encoder_rnn_init_state = None
+                    attention_rnn_init_state = None
+                    decoder_rnn_init_states = None
 
             # Encoder
             prenet_outputs = prenet(inputs=embedded_inputs,
@@ -75,7 +93,7 @@ class Tacotron():
             decoder_init_state = output_cell.zero_state(batch_size=batch_size, dtype=tf.float32)
 
             if is_training:
-                helper = TacoTrainingHelper(inputs, mel_targets, hp.num_mels, hp.outputs_per_step)
+                helper = TacoTrainingHelper(text_inputs, mel_targets, hp.num_mels, hp.outputs_per_step)
             else:
                 helper = TacoTestHelper(batch_size, hp.num_mels, hp.outputs_per_step)
 
@@ -97,7 +115,7 @@ class Tacotron():
             # Grab alignments from the final decoder state:
             alignments = tf.transpose(final_decoder_state[0].alignment_history.stack(), [1, 2, 0])
 
-            self.inputs = inputs
+            self.inputs = text_inputs
             self.input_lengths = input_lengths
             self.mel_outputs = mel_outputs
             self.linear_outputs = linear_outputs

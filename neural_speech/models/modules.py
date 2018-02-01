@@ -25,14 +25,30 @@ def prenet(inputs, drop_rate, is_training, layer_sizes, scope="prenet", reuse=No
     return x
 
 
-def attention_decoder(inputs, num_units, input_lengths, is_training, scope="attention_decoder", reuse=None):
+def attention_decoder(inputs, num_units, input_lengths, is_training, attention_type="bahdanau",
+                      scope="attention_decoder", reuse=None):
     with tf.variable_scope(scope, reuse=reuse):
-        # Bahdanau et al. attention mechanism
-        attention_mechanism = tf.contrib.seq2seq.BahdanauAttention(
-                num_units,  # attention units
-                inputs,
-                memory_sequence_length=input_lengths
-        )
+        if attention_type == 'bah_mon':
+            attention_mechanism = tf.contrib.seq2seq.BahdanauMonotonicAttention(
+                    num_units, inputs)
+        elif attention_type == 'bah_norm':
+            attention_mechanism = tf.contrib.seq2seq.BahdanauAttention(
+                    num_units, inputs, normalize=True)
+        elif attention_type == 'luong_scaled':
+            attention_mechanism = tf.contrib.seq2seq.LuongAttention(
+                    num_units, inputs, scale=True)
+        elif attention_type == 'luong':
+            attention_mechanism = tf.contrib.seq2seq.LuongAttention(
+                    num_units, inputs)
+        elif attention_type == 'bah':
+            # Bahdanau et al. attention mechanism
+            attention_mechanism = tf.contrib.seq2seq.BahdanauAttention(
+                    num_units,  # attention units
+                    inputs,
+                    memory_sequence_length=input_lengths
+            )
+        else:
+            raise Exception("Unknown attention type ")
 
         # Attention
         attention_cell = tf.contrib.seq2seq.AttentionWrapper(
@@ -40,10 +56,8 @@ def attention_decoder(inputs, num_units, input_lengths, is_training, scope="atte
                 attention_mechanism,  # 256
                 alignment_history=True,
                 output_attention=False)  # [N, T_in, 256]
-
-        # Concatenate attention context vector and RNN cell output into a 512D vector.
+        #  Concatenate attention context vector and RNN cell output into a 512D vector.
         concat_cell = models.rnn_wrappers.ConcatOutputAndAttentionWrapper(attention_cell)  # [N, T_in, 512]
-
     return concat_cell
 
 
