@@ -25,6 +25,7 @@ hparams = tf.contrib.training.HParams(
         decoder_dim=256,
         speaker_embed_dim=16,
         num_speakers=1,
+        attention_type="bah",  # bahdanau attention mechanism
 
         # Training:
         batch_size=32,

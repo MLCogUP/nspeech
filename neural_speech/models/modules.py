@@ -25,7 +25,7 @@ def prenet(inputs, drop_rate, is_training, layer_sizes, scope="prenet", reuse=No
     return x
 
 
-def attention_decoder(inputs, num_units, input_lengths, is_training, attention_type="bahdanau",
+def attention_decoder(inputs, num_units, input_lengths, is_training, attention_type="bah",
                       scope="attention_decoder", reuse=None):
     with tf.variable_scope(scope, reuse=reuse):
         if attention_type == 'bah_mon':

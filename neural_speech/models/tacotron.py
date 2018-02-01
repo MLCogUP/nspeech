@@ -48,22 +48,22 @@ class Tacotron():
                     speaker_embed = tf.nn.embedding_lookup(speaker_embed, speaker_id)
                     embedded_inputs = tf.concat([embedded_inputs, speaker_embed], axis=-1)  # [N, T_in, 512]
                     # TODO: what are the hp values for rnn init?
-                    before_highway = tf.layers.dense(speaker_embed, hp.enc_prenet_sizes[-1], activation=tf.nn.softsign)
-                    encoder_rnn_init_state = tf.layers.dense(speaker_embed, hp.enc_rnn_size * 2,
-                                                             activation=tf.nn.softsign)
+                    # before_highway = tf.layers.dense(speaker_embed, hp.enc_prenet_sizes[-1], activation=tf.nn.softsign)
+                    # encoder_rnn_init_state = tf.layers.dense(speaker_embed, hp.enc_rnn_size * 2,
+                    #                                          activation=tf.nn.softsign)
+                    #
+                    # attention_rnn_init_state = tf.layers.dense(speaker_embed, hp.attention_state_size,
+                    #                                            activation=tf.nn.softsign)
+                    # decoder_rnn_init_states = [
+                    #     tf.layers.dense(speaker_embed, hp.dec_rnn_size, activation=tf.nn.softsign) for _ in
+                    #     range(hp.dec_layer_num)]
 
-                    attention_rnn_init_state = tf.layers.dense(speaker_embed, hp.attention_state_size,
-                                                               activation=tf.nn.softsign)
-                    decoder_rnn_init_states = [
-                        tf.layers.dense(speaker_embed, hp.dec_rnn_size, activation=tf.nn.softsign) for _ in
-                        range(hp.dec_layer_num)]
-
-                else:
-                    speaker_embed = None
-                    before_highway = None
-                    encoder_rnn_init_state = None
-                    attention_rnn_init_state = None
-                    decoder_rnn_init_states = None
+                # else:
+                #     speaker_embed = None
+                #     before_highway = None
+                #     encoder_rnn_init_state = None
+                #     attention_rnn_init_state = None
+                #     decoder_rnn_init_states = None
 
             # Encoder
             prenet_outputs = prenet(inputs=embedded_inputs,
