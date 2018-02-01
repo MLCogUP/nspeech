@@ -94,6 +94,6 @@ ENV/
 # custom definitions
 run*.sh
 
-logs
-data
+neural_speech/logs
+neural_speech/data
 .idea/
