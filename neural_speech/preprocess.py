@@ -2,34 +2,40 @@
 
 import argparse
 import os
-from multiprocessing import cpu_count
+import multiprocessing
 
-from datasets import blizzard, ljspeech, german_speech, pavoque_corpus
+import datasets
 from hparams import hparams
 from tqdm import tqdm
 
 
 def preprocess_blizzard(args, in_dir, out_dir):
     os.makedirs(out_dir, exist_ok=True)
-    metadata = blizzard.build_from_path(in_dir, out_dir, args.num_workers, tqdm=tqdm)
+    metadata = datasets.blizzard.build_from_path(in_dir, out_dir, args.num_workers, tqdm=tqdm)
     write_metadata(metadata, out_dir)
 
 
 def preprocess_ljspeech(args, in_dir, out_dir):
     os.makedirs(out_dir, exist_ok=True)
-    metadata = ljspeech.build_from_path(in_dir, out_dir, args.num_workers, tqdm=tqdm)
+    metadata = datasets.ljspeech.build_from_path(in_dir, out_dir, args.num_workers, tqdm=tqdm)
     write_metadata(metadata, out_dir)
 
 
 def preprocess_german_speech(args, in_dir, out_dir):
     os.makedirs(out_dir, exist_ok=True)
-    metadata = german_speech.build_from_path(in_dir, out_dir, args.num_workers, tqdm=tqdm)
+    metadata = datasets.german_speech.build_from_path(in_dir, out_dir, args.num_workers, tqdm=tqdm)
     write_metadata(metadata, out_dir)
 
 
 def preprocess_pavoque(args, in_dir, out_dir):
     os.makedirs(out_dir, exist_ok=True)
-    metadata = pavoque_corpus.build_from_path(in_dir, out_dir, args.num_workers, tqdm=tqdm)
+    metadata = datasets.pavoque_corpus.build_from_path(in_dir, out_dir, args.num_workers, tqdm=tqdm)
+    write_metadata(metadata, out_dir)
+
+
+def preprocess_vctk(args, in_dir, out_dir):
+    os.makedirs(out_dir, exist_ok=True)
+    metadata = datasets.vctk.build_from_path(in_dir, out_dir, args.num_workers, tqdm=tqdm)
     write_metadata(metadata, out_dir)
 
 
@@ -51,8 +57,9 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--in_dir', default="data")
     parser.add_argument('--out_dir', default='training')
-    parser.add_argument('--dataset', required=True, choices=['blizzard', 'ljspeech', 'german_speech', 'pavoque'])
-    parser.add_argument('--num_workers', type=int, default=cpu_count())
+    parser.add_argument('--dataset', required=True,
+                        choices=['blizzard', 'ljspeech', 'german_speech', 'pavoque', 'vctk'])
+    parser.add_argument('--num_workers', type=int, default=multiprocessing.cpu_count())
     args = parser.parse_args()
     if args.dataset == 'blizzard':
         preprocess_blizzard(args, args.in_dir, args.out_dir)
