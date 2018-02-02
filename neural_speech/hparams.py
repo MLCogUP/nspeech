@@ -29,7 +29,7 @@ hparams = tf.contrib.training.HParams(
 
         # Training:
         batch_size=32,
-        queue_size=100,
+        queue_size=16,  # number of batches stored in queue
         adam_beta1=0.9,
         adam_beta2=0.999,
         initial_learning_rate=0.002,

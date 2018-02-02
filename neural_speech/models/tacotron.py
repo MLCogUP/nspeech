@@ -1,10 +1,10 @@
 import tensorflow as tf
-from models.modules import prenet, embedding, cbhg, attention_decoder
 from tensorflow.contrib.rnn import GRUCell, MultiRNNCell, OutputProjectionWrapper, ResidualWrapper
 from tensorflow.contrib.seq2seq import BasicDecoder
+
+from models.modules import prenet, embedding, cbhg, attention_decoder
 from text.symbols import symbols
 from util.infolog import log
-
 from .helpers import TacoTestHelper, TacoTrainingHelper
 
 
@@ -58,12 +58,12 @@ class Tacotron():
                     #     tf.layers.dense(speaker_embed, hp.dec_rnn_size, activation=tf.nn.softsign) for _ in
                     #     range(hp.dec_layer_num)]
 
-                # else:
-                #     speaker_embed = None
-                #     before_highway = None
-                #     encoder_rnn_init_state = None
-                #     attention_rnn_init_state = None
-                #     decoder_rnn_init_states = None
+                else:
+                    speaker_embed = None
+                    #     before_highway = None
+                    #     encoder_rnn_init_state = None
+                    #     attention_rnn_init_state = None
+                    #     decoder_rnn_init_states = None
 
             # Encoder
             prenet_outputs = prenet(inputs=embedded_inputs,

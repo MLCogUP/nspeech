@@ -8,6 +8,7 @@ import traceback
 import matplotlib
 import numpy as np
 import tensorflow as tf
+
 from text import cmudict, text_to_sequence
 from util.infolog import log
 
@@ -96,15 +97,21 @@ class DataFeeder(object):
             self._coord.request_stop(e)
 
     def _enqueue_next_group(self):
+        """
+        Loads a bunch of samples into memory, sorts them by output length and
+        creates batches from it.
+        This is done for efficiency - reducing padding.
+        """
         start = time.time()
 
         # Read a group of examples:
         n = self._hparams.batch_size
         r = self._hparams.outputs_per_step
-        examples = [self._get_next_example() for i in range(n * _batches_per_group)]
+        examples = [self._get_next_example() for _ in range(n * _batches_per_group)]
 
         # Bucket examples based on similar output sequence length for efficiency:
         examples.sort(key=lambda x: x[-1])
+        # TODO: numpy split array?
         batches = [examples[i:i + n] for i in range(0, len(examples), n)]
         random.shuffle(batches)
 
@@ -114,7 +121,7 @@ class DataFeeder(object):
             self._session.run(self._enqueue_op, feed_dict=feed_dict)
 
     def _get_next_example(self):
-        '''Loads a single example (input, mel_target, linear_target, cost) from disk'''
+        '''Loads a single example (input, speaker_id, mel_target, linear_target, cost) from disk'''
         if self._offset >= len(self._metadata):
             self._offset = 0
             random.shuffle(self._metadata)
@@ -130,8 +137,10 @@ class DataFeeder(object):
 
         if self._cmudict and random.random() < _p_cmudict:
             text = ' '.join([self._maybe_get_arpabet(word) for word in text.split(' ')])
-
+        # encode text sequence information
         input_data = np.asarray(text_to_sequence(text, self._cleaner_names), dtype=np.int32)
+        # load spectrograms given by path in csv file
+        # TODO: try generating spectrograms on demand
         linear_target = np.load(os.path.join(self._datadir, spectrogram_fn))
         mel_target = np.load(os.path.join(self._datadir, mel_fn))
         return input_data, speaker_id, mel_target, linear_target, len(linear_target)
@@ -145,7 +154,7 @@ def _prepare_batch(batch, outputs_per_step):
     random.shuffle(batch)
     inputs = _prepare_inputs([x[0] for x in batch])
     input_lengths = np.asarray([len(x[0]) for x in batch], dtype=np.int32)
-    speaker_ids = _prepare_inputs([x[1] for x in batch])
+    speaker_ids = np.asarray([x[1] for x in batch], dtype=np.int32)
     mel_targets = _prepare_targets([x[2] for x in batch], outputs_per_step)
     linear_targets = _prepare_targets([x[3] for x in batch], outputs_per_step)
     return inputs, input_lengths, speaker_ids, mel_targets, linear_targets
