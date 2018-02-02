@@ -35,18 +35,22 @@ class Tacotron():
             batch_size = tf.shape(text_inputs)[0]
             hp = self._hparams
             vocab_size = len(symbols)
-            embedded_inputs = embedding(text_inputs, vocab_size, hp.embedding_dim)
+            embedded_inputs = embedding(text_inputs, vocab_size, hp.embedding_dim)  # [N, T_in, embd_size]
 
             # extract speaker embedding if multi-speaker
             with tf.variable_scope('speaker'):
                 if hp.num_speakers > 1:
-                    speaker_id = speaker_ids
-                    speaker_embed = tf.get_variable('speaker_embed',
-                                                    shape=(hp.num_speakers, hp.speaker_embed_dim),
-                                                    dtype=tf.float32)
+                    speaker_embedding = tf.get_variable('speaker_embed',
+                                                        shape=(hp.num_speakers, hp.speaker_embed_dim),
+                                                        dtype=tf.float32)
                     # TODO: what about special initializer=tf.truncated_normal_initializer(stddev=0.5)?
-                    speaker_embed = tf.nn.embedding_lookup(speaker_embed, speaker_id)
-                    embedded_inputs = tf.concat([embedded_inputs, speaker_embed], axis=-1)  # [N, T_in, 512]
+                    speaker_embed = tf.nn.embedding_lookup(speaker_embedding, speaker_ids)
+                    speaker_embed = tf.layers.dense(speaker_embed, 256, activation=tf.nn.softsign)
+
+
+                    speaker_embed = tf.tile(tf.expand_dims(speaker_embed, axis=1),
+                                            [1, tf.shape(embedded_inputs)[1], 1])
+                    embedded_inputs = tf.concat([embedded_inputs, speaker_embed], axis=-1)
                     # TODO: what are the hp values for rnn init?
                     # before_highway = tf.layers.dense(speaker_embed, hp.enc_prenet_sizes[-1], activation=tf.nn.softsign)
                     # encoder_rnn_init_state = tf.layers.dense(speaker_embed, hp.enc_rnn_size * 2,
@@ -72,9 +76,9 @@ class Tacotron():
                                     layer_sizes=[256, 128],
                                     scope="prenet")  # [N, T_in, 128]
             encoder_outputs = cbhg(prenet_outputs, input_lengths,
-                                   speaker_embed=speaker_embed,
+                                   speaker_embed=None,
                                    is_training=is_training,
-                                   K=16,
+                                   K=hp.decoder_cbhg_banks,
                                    c=[128, 128],  # [N, T_in, 256]
                                    scope='encoder_cbhg')
 
@@ -106,8 +110,9 @@ class Tacotron():
 
             # Add post-processing
             post_outputs = cbhg(mel_outputs, None,
+                                speaker_embed=None,
                                 is_training=is_training,
-                                K=8,
+                                K=hp.post_cbhg_banks,
                                 c=[256, hp.num_mels],
                                 scope='post_cbhg')  # [N, T_out, 256]
             linear_outputs = tf.layers.dense(post_outputs, hp.num_freq)  # [N, T_out, F]

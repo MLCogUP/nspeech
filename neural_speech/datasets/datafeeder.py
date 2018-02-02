@@ -15,7 +15,6 @@ from util.infolog import log
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
-_batches_per_group = 32
 _p_cmudict = 0.5
 _pad = 0
 
@@ -107,7 +106,8 @@ class DataFeeder(object):
         # Read a group of examples:
         n = self._hparams.batch_size
         r = self._hparams.outputs_per_step
-        examples = [self._get_next_example() for _ in range(n * _batches_per_group)]
+        batches_per_group = self._hparams.batch_group_size
+        examples = [self._get_next_example() for _ in range(n * batches_per_group)]
 
         # Bucket examples based on similar output sequence length for efficiency:
         examples.sort(key=lambda x: x[-1])

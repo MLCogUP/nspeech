@@ -1,6 +1,7 @@
-import models.rnn_wrappers
 import tensorflow as tf
 from tensorflow.contrib.rnn import GRUCell
+
+import models.rnn_wrappers
 
 
 def embedding(inputs, vocab_size, num_units, scope="embedding", reuse=None):
@@ -8,12 +9,12 @@ def embedding(inputs, vocab_size, num_units, scope="embedding", reuse=None):
     Embeds a given tensor.
     '''
     with tf.variable_scope(scope, reuse=reuse):
-        embedding_table = tf.get_variable('embedding',
-                                          [vocab_size, num_units],
-                                          dtype=tf.float32,
-                                          initializer=tf.truncated_normal_initializer(mean=0.0,
-                                                                                      stddev=0.01))  # stddev=0.5?
-    return tf.nn.embedding_lookup(embedding_table, inputs)  # [N, T_in, 256]
+        embd = tf.get_variable('embedding',
+                               [vocab_size, num_units],
+                               dtype=tf.float32,
+                               initializer=tf.truncated_normal_initializer(mean=0.0,
+                                                                           stddev=0.01))  # stddev=0.5?
+    return tf.nn.embedding_lookup(embd, inputs)  # [N, T_in, 256]
 
 
 def prenet(inputs, drop_rate, is_training, layer_sizes, scope="prenet", reuse=None):
