@@ -2,6 +2,7 @@ import argparse
 import os
 
 import falcon
+
 from hparams import hparams, hparams_debug_string
 from synthesizer import Synthesizer
 
@@ -67,7 +68,8 @@ class SynthesisResource:
     def on_get(self, req, res):
         if not req.params.get('text'):
             raise falcon.HTTPBadRequest()
-        res.data = synthesizer.synthesize(req.params.get('text'))
+        speaker_id = int(req.params.get('speaker_id') or 374)
+        res.data = synthesizer.synthesize(req.params.get('text'), speaker_id)
         res.content_type = 'audio/wav'
 
 
@@ -84,8 +86,10 @@ if __name__ == '__main__':
     parser.add_argument('--port', type=int, default=9000)
     parser.add_argument('--hparams', default='',
                         help='Hyperparameter overrides as a comma-separated list of name=value pairs')
+    parser.add_argument('--gpu', default=0, type=int, help='Select gpu for computation')
     args = parser.parse_args()
     os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
+    os.environ['CUDA_VISIBLE_DEVICES'] = str(args.gpu)  # added available gpu
     hparams.parse(args.hparams)
     print(hparams_debug_string())
     synthesizer.load(args.checkpoint)
