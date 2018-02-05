@@ -137,7 +137,7 @@ class Tacotron2():
             self.mel_loss = tf.reduce_mean(tf.abs(self.mel_targets - self.mel_outputs))
             l1 = tf.abs(self.linear_targets - self.linear_outputs)
             # Prioritize loss for frequencies under 3000 Hz.
-            n_priority_freq = int(3000 / (hp.sample_rate * 0.5) * hp.num_freq)
+            n_priority_freq = int(2000 / (hp.sample_rate * 0.5) * hp.num_freq)
             self.linear_loss = 0.5 * tf.reduce_mean(l1) + 0.5 * tf.reduce_mean(l1[:, :, 0:n_priority_freq])
             self.loss = self.mel_loss + self.linear_loss
 
@@ -149,10 +149,13 @@ class Tacotron2():
         '''
         with tf.variable_scope('optimizer'):
             hp = self._hparams
-            if hp.decay_learning_rate:
-                self.learning_rate = _learning_rate_decay(hp.initial_learning_rate, global_step)
-            else:
-                self.learning_rate = tf.convert_to_tensor(hp.initial_learning_rate)
+            # TODO: remove decay learning rate?
+            # if hp.decay_learning_rate:
+            #     self.learning_rate = _learning_rate_decay(hp.initial_learning_rate, global_step)
+            # else:
+            #     self.learning_rate = tf.convert_to_tensor(hp.initial_learning_rate)
+            self.learning_rate = tf.train.exponential_decay(
+                    hp.initial_learning_rate, global_step, hp.learning_rate_decay_halflife, 0.5)
             optimizer = tf.train.AdamOptimizer(self.learning_rate, hp.adam_beta1, hp.adam_beta2)
             gradients, variables = zip(*optimizer.compute_gradients(self.loss))
             self.gradients = gradients
@@ -191,9 +194,8 @@ class Tacotron2():
 
             self.stats = tf.summary.merge_all()
 
-
-def _learning_rate_decay(init_lr, global_step):
-    # Noam scheme from tensor2tensor:
-    warmup_steps = 4000.0
-    step = tf.cast(global_step + 1, dtype=tf.float32)
-    return init_lr * warmup_steps ** 0.5 * tf.minimum(step * warmup_steps ** -1.5, step ** -0.5)
+# def _learning_rate_decay(init_lr, global_step):
+#     # Noam scheme from tensor2tensor:
+#     warmup_steps = 4000.0
+#     step = tf.cast(global_step + 1, dtype=tf.float32)
+#     return init_lr * warmup_steps ** 0.5 * tf.minimum(step * warmup_steps ** -1.5, step ** -0.5)
