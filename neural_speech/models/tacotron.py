@@ -45,12 +45,10 @@ class Tacotron():
                                                         dtype=tf.float32)
                     # TODO: what about special initializer=tf.truncated_normal_initializer(stddev=0.5)?
                     speaker_embed = tf.nn.embedding_lookup(speaker_embedding, speaker_ids)
-                    speaker_embed = tf.layers.dense(speaker_embed, 256, activation=tf.nn.softsign)
-
-
-                    speaker_embed = tf.tile(tf.expand_dims(speaker_embed, axis=1),
-                                            [1, tf.shape(embedded_inputs)[1], 1])
-                    embedded_inputs = tf.concat([embedded_inputs, speaker_embed], axis=-1)
+                    # speaker_embed = tf.layers.dense(speaker_embed, 256, activation=tf.nn.softsign)
+                    # speaker_embed = tf.tile(tf.expand_dims(speaker_embed, axis=1),
+                    #                         [1, tf.shape(embedded_inputs)[1], 1])
+                    # embedded_inputs = tf.concat([embedded_inputs, speaker_embed], axis=-1)
                     # TODO: what are the hp values for rnn init?
                     # before_highway = tf.layers.dense(speaker_embed, hp.enc_prenet_sizes[-1], activation=tf.nn.softsign)
                     # encoder_rnn_init_state = tf.layers.dense(speaker_embed, hp.enc_rnn_size * 2,
@@ -76,7 +74,7 @@ class Tacotron():
                                     layer_sizes=[256, 128],
                                     scope="prenet")  # [N, T_in, 128]
             encoder_outputs = cbhg(prenet_outputs, input_lengths,
-                                   speaker_embed=None,
+                                   speaker_embed=speaker_embed,
                                    is_training=is_training,
                                    K=hp.decoder_cbhg_banks,
                                    c=[128, 128],  # [N, T_in, 256]

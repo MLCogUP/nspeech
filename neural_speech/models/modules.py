@@ -92,14 +92,14 @@ def cbhg(inputs, input_lengths, speaker_embed=None, is_training=True,
             with tf.variable_scope('highway_' + str(i)):
                 # site specific speaker embedding
                 if speaker_embed is not None:
-                    s = tf.layers.dense(speaker_embed, h.shape[-1], activation=tf.nn.elu)
+                    s = tf.layers.dense(speaker_embed, h.shape[-1], activation=tf.nn.softsign)
                     s = tf.tile(tf.expand_dims(s, 1), [1, tf.shape(h)[1], 1])
-                    h = tf.concat([h, s], 2)
+                    h = tf.concat([h, s], -1)
                 h = highwaynet(h)
 
         # site specfic speaker embedding
         if speaker_embed is not None:
-            s = tf.layers.dense(speaker_embed, gru_units, activation=tf.nn.elu)
+            s = tf.layers.dense(speaker_embed, gru_units, activation=tf.nn.softsign)
         else:
             s = None
 
@@ -117,7 +117,8 @@ def cbhg(inputs, input_lengths, speaker_embed=None, is_training=True,
         return encoded
 
 
-def highwaynet(inputs, num_units=128, scope="highway", reuse=False):
+def highwaynet(inputs, scope="highway", reuse=False):
+    num_units = inputs.shape[-1]
     with tf.variable_scope(scope, reuse=reuse):
         h = tf.layers.dense(inputs, units=num_units, activation=tf.nn.elu, name='H')
         t = tf.layers.dense(inputs, units=num_units, activation=tf.nn.sigmoid, name='T',
