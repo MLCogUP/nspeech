@@ -35,7 +35,7 @@ def run_eval(args):
         path = '%s-%d.wav' % (base_path, i)
         print('Synthesizing: %s' % path)
         with open(path, 'wb') as f:
-            f.write(synth.synthesize(text))
+            f.write(synth.synthesize(text, args.speaker))
 
 
 def run_harvard_eval(args):
@@ -50,7 +50,7 @@ def run_harvard_eval(args):
         path = '%s-%d-%d.wav' % (base_path, int(i / 11), i % 11)
         print('Synthesizing: %s' % path)
         with open(path, 'wb') as f:
-            f.write(synth.synthesize(text))
+            f.write(synth.synthesize(text, args.speaker))
 
 
 def main():
@@ -58,9 +58,11 @@ def main():
     parser.add_argument('--checkpoint', required=True, help='Path to model checkpoint')
     parser.add_argument('--hparams', default='',
                         help='Hyperparameter overrides as a comma-separated list of name=value pairs')
+    parser.add_argument('--gpu', default=0, type=int, help='Select gpu for computation')
+    parser.add_argument('--speaker', type=int, default=374, help='Speaker ID')
     args = parser.parse_args()
     os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
-    os.environ['CUDA_VISIBLE_DEVICES'] = '1'
+    os.environ['CUDA_VISIBLE_DEVICES'] = str(args.gpu)  # added available gpu
     hparams.parse(args.hparams)
     # run_eval(args)
     run_harvard_eval(args)

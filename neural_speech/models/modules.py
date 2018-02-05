@@ -1,6 +1,7 @@
-import models.rnn_wrappers
 import tensorflow as tf
 from tensorflow.contrib.rnn import GRUCell
+
+import models.rnn_wrappers
 
 
 def embedding(inputs, vocab_size, num_units, scope="embedding", reuse=None):
@@ -8,12 +9,12 @@ def embedding(inputs, vocab_size, num_units, scope="embedding", reuse=None):
     Embeds a given tensor.
     '''
     with tf.variable_scope(scope, reuse=reuse):
-        embedding_table = tf.get_variable('embedding',
-                                          [vocab_size, num_units],
-                                          dtype=tf.float32,
-                                          initializer=tf.truncated_normal_initializer(mean=0.0,
-                                                                                      stddev=0.01))  # stddev=0.5?
-    return tf.nn.embedding_lookup(embedding_table, inputs)  # [N, T_in, 256]
+        embd = tf.get_variable('embedding',
+                               [vocab_size, num_units],
+                               dtype=tf.float32,
+                               initializer=tf.truncated_normal_initializer(mean=0.0,
+                                                                           stddev=0.01))  # stddev=0.5?
+    return tf.nn.embedding_lookup(embd, inputs)  # [N, T_in, 256]
 
 
 def prenet(inputs, drop_rate, is_training, layer_sizes, scope="prenet", reuse=None):
@@ -25,29 +26,44 @@ def prenet(inputs, drop_rate, is_training, layer_sizes, scope="prenet", reuse=No
     return x
 
 
-def attention_decoder(inputs, num_units, input_lengths, is_training, scope="attention_decoder", reuse=None):
+def attention_decoder(inputs, num_units, input_lengths, is_training, speaker_embd=None, attention_type="bah",
+                      scope="attention_decoder", reuse=None):
     with tf.variable_scope(scope, reuse=reuse):
-        # Bahdanau et al. attention mechanism
-        attention_mechanism = tf.contrib.seq2seq.BahdanauAttention(
-                num_units,  # attention units
-                inputs,
-                memory_sequence_length=input_lengths
-        )
+        if attention_type == 'bah_mon':
+            attention_mechanism = tf.contrib.seq2seq.BahdanauMonotonicAttention(
+                    num_units, inputs)
+        elif attention_type == 'bah_norm':
+            attention_mechanism = tf.contrib.seq2seq.BahdanauAttention(
+                    num_units, inputs, normalize=True)
+        elif attention_type == 'luong_scaled':
+            attention_mechanism = tf.contrib.seq2seq.LuongAttention(
+                    num_units, inputs, scale=True)
+        elif attention_type == 'luong':
+            attention_mechanism = tf.contrib.seq2seq.LuongAttention(
+                    num_units, inputs)
+        elif attention_type == 'bah':
+            # Bahdanau et al. attention mechanism
+            attention_mechanism = tf.contrib.seq2seq.BahdanauAttention(
+                    num_units,  # attention units
+                    inputs,
+                    memory_sequence_length=input_lengths
+            )
+        else:
+            raise Exception("Unknown attention type ")
 
         # Attention
         attention_cell = tf.contrib.seq2seq.AttentionWrapper(
-                models.rnn_wrappers.PrenetWrapper(GRUCell(num_units), [256, 128], is_training),  # 256
+                models.rnn_wrappers.PrenetWrapper(GRUCell(num_units), [256, 128], is_training,
+                                                  speaker_embd=speaker_embd),  # 256
                 attention_mechanism,  # 256
                 alignment_history=True,
                 output_attention=False)  # [N, T_in, 256]
-
-        # Concatenate attention context vector and RNN cell output into a 512D vector.
+        #  Concatenate attention context vector and RNN cell output into a 512D vector.
         concat_cell = models.rnn_wrappers.ConcatOutputAndAttentionWrapper(attention_cell)  # [N, T_in, 512]
+        return concat_cell
 
-    return concat_cell
 
-
-def cbhg(inputs, input_lengths, speaker_embed=None, is_training=True,
+def cbhg(inputs, input_lengths, speaker_embd=None, is_training=True,
          K=16, c=(128, 128), gru_units=128, num_highways=4, scope="cbhg"):
     with tf.variable_scope(scope):
         with tf.variable_scope('conv_bank'):
@@ -76,15 +92,16 @@ def cbhg(inputs, input_lengths, speaker_embed=None, is_training=True,
         for i in range(num_highways):
             with tf.variable_scope('highway_' + str(i)):
                 # site specific speaker embedding
-                if speaker_embed is not None:
-                    s = tf.layers.dense(speaker_embed, h.shape[-1], activation=tf.nn.elu)
+                if speaker_embd is not None:
+                    s = tf.layers.dense(speaker_embd, h.shape[-1], activation=tf.nn.softsign)
                     s = tf.tile(tf.expand_dims(s, 1), [1, tf.shape(h)[1], 1])
-                    h = tf.concat([h, s], 2)
+                    h = tf.concat([h, s], -1)
                 h = highwaynet(h)
 
         # site specfic speaker embedding
-        if speaker_embed is not None:
-            s = tf.layers.dense(speaker_embed, gru_units, activation=tf.nn.elu)
+        if speaker_embd is not None:
+            # TODO: what about two different s1, s2 for forwards and backwards
+            s = tf.layers.dense(speaker_embd, gru_units, activation=tf.nn.softsign)
         else:
             s = None
 
@@ -102,7 +119,8 @@ def cbhg(inputs, input_lengths, speaker_embed=None, is_training=True,
         return encoded
 
 
-def highwaynet(inputs, num_units=128, scope="highway", reuse=False):
+def highwaynet(inputs, scope="highway", reuse=False):
+    num_units = inputs.shape[-1]
     with tf.variable_scope(scope, reuse=reuse):
         h = tf.layers.dense(inputs, units=num_units, activation=tf.nn.elu, name='H')
         t = tf.layers.dense(inputs, units=num_units, activation=tf.nn.sigmoid, name='T',

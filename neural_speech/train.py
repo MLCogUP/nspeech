@@ -50,7 +50,8 @@ def train(log_dir, args):
         global_step = tf.Variable(0, name='global_step', trainable=False)
         with tf.variable_scope('model'):
             model = create_model(args.model, hparams)
-            model.initialize(feeder.inputs, feeder.input_lengths, feeder.mel_targets, feeder.linear_targets)
+            model.initialize(feeder.inputs, feeder.input_lengths, feeder.speaker_ids, feeder.mel_targets,
+                             feeder.linear_targets)
             model.add_loss()
             model.add_optimizer(global_step)
             model.add_stats()
@@ -107,6 +108,7 @@ def train(log_dir, args):
                                             args.model, commit, time_string(), step, loss))
                     log('%s, %s, %s, step=%d, loss=%.5f' % (args.model, commit, time_string(), step, loss))
                     log('Input: %s' % sequence_to_text(input_seq))
+                break
 
         except Exception as e:
             log('Exiting due to exception: %s' % e, slack=True)
@@ -117,7 +119,7 @@ def train(log_dir, args):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--base_dir', default=os.path.expanduser('.'))
-    parser.add_argument('--input', default='data/train.txt')
+    parser.add_argument('--input', default='../data/train.txt')
     parser.add_argument('--model', default='tacotron')
     parser.add_argument('--name', help='Name of the run. Used for logging. Defaults to model name.')
     parser.add_argument('--hparams', default='',
@@ -136,7 +138,7 @@ def main():
     os.environ['TF_CPP_MIN_LOG_LEVEL'] = str(args.tf_log_level)
     os.environ['CUDA_VISIBLE_DEVICES'] = str(args.gpu)  # added available gpu
     run_name = args.name or args.model
-    log_dir = os.path.join(args.base_dir, 'logs', run_name)
+    log_dir = os.path.join(args.base_dir, '..', 'logs', run_name)
     os.makedirs(log_dir, exist_ok=True)
     infolog.init(os.path.join(log_dir, 'train.log'), run_name, args.slack_url)
     hparams.parse(args.hparams)

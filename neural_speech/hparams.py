@@ -25,10 +25,14 @@ hparams = tf.contrib.training.HParams(
         decoder_dim=256,
         speaker_embed_dim=16,
         num_speakers=1,
+        attention_type="bah",  # bahdanau attention mechanism
+        decoder_cbhg_banks=16,
+        post_cbhg_banks=8,
 
         # Training:
         batch_size=32,
-        queue_size=100,
+        batch_group_size=32,
+        queue_size=16,  # number of batches stored in queue
         adam_beta1=0.9,
         adam_beta2=0.999,
         initial_learning_rate=0.002,

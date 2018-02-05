@@ -8,13 +8,13 @@ import traceback
 import matplotlib
 import numpy as np
 import tensorflow as tf
+
 from text import cmudict, text_to_sequence
 from util.infolog import log
 
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
-_batches_per_group = 32
 _p_cmudict = 0.5
 _pad = 0
 
@@ -45,18 +45,22 @@ class DataFeeder(object):
         self._placeholders = [
             tf.placeholder(tf.int32, [None, None], 'inputs'),
             tf.placeholder(tf.int32, [None], 'input_lengths'),
+            tf.placeholder(tf.int32, [None], 'speaker_ids'),
             tf.placeholder(tf.float32, [None, None, hparams.num_mels], 'mel_targets'),
             tf.placeholder(tf.float32, [None, None, hparams.num_freq], 'linear_targets')
         ]
 
         # Create queue for buffering data:
-        queue = tf.FIFOQueue(hparams.queue_size, [tf.int32, tf.int32, tf.float32, tf.float32], name='input_queue')
+        queue = tf.FIFOQueue(hparams.queue_size,
+                             [tf.int32, tf.int32, tf.int32, tf.float32, tf.float32],
+                             name='input_queue')
         self._enqueue_op = queue.enqueue(self._placeholders)
-        self.inputs, self.input_lengths, self.mel_targets, self.linear_targets = queue.dequeue()
+        self.inputs, self.input_lengths, self.speaker_ids, self.mel_targets, self.linear_targets = queue.dequeue()
         self.inputs.set_shape(self._placeholders[0].shape)
         self.input_lengths.set_shape(self._placeholders[1].shape)
-        self.mel_targets.set_shape(self._placeholders[2].shape)
-        self.linear_targets.set_shape(self._placeholders[3].shape)
+        self.speaker_ids.set_shape(self._placeholders[2].shape)
+        self.mel_targets.set_shape(self._placeholders[3].shape)
+        self.linear_targets.set_shape(self._placeholders[4].shape)
 
         # Load CMUDict: If enabled, this will randomly substitute some words in the training data with
         # their ARPABet equivalents, which will allow you to also pass ARPABet to the model for
@@ -92,15 +96,22 @@ class DataFeeder(object):
             self._coord.request_stop(e)
 
     def _enqueue_next_group(self):
+        """
+        Loads a bunch of samples into memory, sorts them by output length and
+        creates batches from it.
+        This is done for efficiency - reducing padding.
+        """
         start = time.time()
 
         # Read a group of examples:
         n = self._hparams.batch_size
         r = self._hparams.outputs_per_step
-        examples = [self._get_next_example() for i in range(n * _batches_per_group)]
+        batches_per_group = self._hparams.batch_group_size
+        examples = [self._get_next_example() for _ in range(n * batches_per_group)]
 
         # Bucket examples based on similar output sequence length for efficiency:
         examples.sort(key=lambda x: x[-1])
+        # TODO: numpy split array?
         batches = [examples[i:i + n] for i in range(0, len(examples), n)]
         random.shuffle(batches)
 
@@ -110,21 +121,29 @@ class DataFeeder(object):
             self._session.run(self._enqueue_op, feed_dict=feed_dict)
 
     def _get_next_example(self):
-        '''Loads a single example (input, mel_target, linear_target, cost) from disk'''
+        '''Loads a single example (input, speaker_id, mel_target, linear_target, cost) from disk'''
         if self._offset >= len(self._metadata):
             self._offset = 0
             random.shuffle(self._metadata)
         meta = self._metadata[self._offset]
         self._offset += 1
 
-        text = meta[4]
+        # TODO: remove work around for old data files
+        if len(meta) == 6:
+            wav_fn, spectrogram_fn, mel_fn, n_frames, text, speaker_id = meta
+        else:
+            wav_fn, spectrogram_fn, mel_fn, n_frames, text = meta
+            speaker_id = 1
+
         if self._cmudict and random.random() < _p_cmudict:
             text = ' '.join([self._maybe_get_arpabet(word) for word in text.split(' ')])
-
+        # encode text sequence information
         input_data = np.asarray(text_to_sequence(text, self._cleaner_names), dtype=np.int32)
-        linear_target = np.load(os.path.join(self._datadir, meta[1]))
-        mel_target = np.load(os.path.join(self._datadir, meta[2]))
-        return input_data, mel_target, linear_target, len(linear_target)
+        # load spectrograms given by path in csv file
+        # TODO: try generating spectrograms on demand
+        linear_target = np.load(os.path.join(self._datadir, spectrogram_fn))
+        mel_target = np.load(os.path.join(self._datadir, mel_fn))
+        return input_data, speaker_id, mel_target, linear_target, len(linear_target)
 
     def _maybe_get_arpabet(self, word):
         arpabet = self._cmudict.lookup(word)
@@ -135,9 +154,10 @@ def _prepare_batch(batch, outputs_per_step):
     random.shuffle(batch)
     inputs = _prepare_inputs([x[0] for x in batch])
     input_lengths = np.asarray([len(x[0]) for x in batch], dtype=np.int32)
-    mel_targets = _prepare_targets([x[1] for x in batch], outputs_per_step)
-    linear_targets = _prepare_targets([x[2] for x in batch], outputs_per_step)
-    return (inputs, input_lengths, mel_targets, linear_targets)
+    speaker_ids = np.asarray([x[1] for x in batch], dtype=np.int32)
+    mel_targets = _prepare_targets([x[2] for x in batch], outputs_per_step)
+    linear_targets = _prepare_targets([x[3] for x in batch], outputs_per_step)
+    return inputs, input_lengths, speaker_ids, mel_targets, linear_targets
 
 
 def _prepare_inputs(inputs):

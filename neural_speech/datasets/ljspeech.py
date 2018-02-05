@@ -77,4 +77,4 @@ def _process_utterance(out_dir, index, wav_path, text):
             np.save(mel_path, mel_spectrogram.T, allow_pickle=False)
 
     # Return a tuple describing this training example:
-    return (wav_fn, spectrogram_fn, mel_fn, n_frames, text)
+    return  wav_fn, spectrogram_fn, mel_fn, n_frames, text, 1

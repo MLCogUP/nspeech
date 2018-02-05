@@ -2,6 +2,7 @@ import io
 
 import numpy as np
 import tensorflow as tf
+
 from hparams import hparams
 from models import create_model
 from text import text_to_sequence
@@ -13,9 +14,10 @@ class Synthesizer:
         print('Constructing model: %s' % model_name)
         inputs = tf.placeholder(tf.int32, [1, None], 'inputs')
         input_lengths = tf.placeholder(tf.int32, [1], 'input_lengths')
+        speaker_ids = tf.placeholder(tf.int32, [1], 'speaker_ids')
         with tf.variable_scope('model'):
             self.model = create_model(model_name, hparams)
-            self.model.initialize(inputs, input_lengths)
+            self.model.initialize(inputs, input_lengths, speaker_ids)
             # TODO: add more outputs as spectrograms
             self.wav_output = audio.inv_spectrogram_tensorflow(self.model.linear_outputs[0])
 
@@ -25,12 +27,13 @@ class Synthesizer:
         saver = tf.train.Saver()
         saver.restore(self.session, checkpoint_path)
 
-    def synthesize(self, text):
+    def synthesize(self, text, speaker_id):
         cleaner_names = [x.strip() for x in hparams.cleaners.split(',')]
         seq = text_to_sequence(text, cleaner_names)
         feed_dict = {
             self.model.inputs: [np.asarray(seq, dtype=np.int32)],
-            self.model.input_lengths: np.asarray([len(seq)], dtype=np.int32)
+            self.model.input_lengths: np.asarray([len(seq)], dtype=np.int32),
+            self.model.speaker_ids: np.asarray([speaker_id], dtype=np.int32)
         }
         wav = self.session.run(self.wav_output, feed_dict=feed_dict)
         wav = audio.inv_preemphasis(wav)

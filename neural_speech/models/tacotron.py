@@ -1,10 +1,10 @@
 import tensorflow as tf
-from models.modules import prenet, embedding, cbhg, attention_decoder
 from tensorflow.contrib.rnn import GRUCell, MultiRNNCell, OutputProjectionWrapper, ResidualWrapper
 from tensorflow.contrib.seq2seq import BasicDecoder
+
+from models.modules import prenet, embedding, cbhg, attention_decoder
 from text.symbols import symbols
 from util.infolog import log
-
 from .helpers import TacoTestHelper, TacoTrainingHelper
 
 
@@ -12,7 +12,7 @@ class Tacotron():
     def __init__(self, hparams):
         self._hparams = hparams
 
-    def initialize(self, inputs, input_lengths, mel_targets=None, linear_targets=None):
+    def initialize(self, text_inputs, input_lengths, speaker_ids, mel_targets=None, linear_targets=None):
         '''Initializes the model for inference.
 
         Sets "mel_outputs", "linear_outputs", and "alignments" fields.
@@ -22,6 +22,7 @@ class Tacotron():
             steps in the input time series, and values are character IDs
           input_lengths: int32 Tensor with shape [N] where N is batch size and values are the lengths
             of each sequence in inputs.
+          speaker_ids: int32 Tensor containing ids of specific speakers
           mel_targets: float32 Tensor with shape [N, T_out, M] where N is batch size, T_out is number
             of steps in the output time series, M is num_mels, and values are entries in the mel
             spectrogram. Only needed for training.
@@ -31,22 +32,21 @@ class Tacotron():
         '''
         with tf.variable_scope('inference'):
             is_training = linear_targets is not None
-            batch_size = tf.shape(inputs)[0]
+            batch_size = tf.shape(text_inputs)[0]
             hp = self._hparams
             vocab_size = len(symbols)
-            embedded_inputs = embedding(inputs, vocab_size, hp.embedding_dim)
+            embedded_inputs = embedding(text_inputs, vocab_size, hp.embedding_dim)  # [N, T_in, embd_size]
 
             # extract speaker embedding if multi-speaker
             with tf.variable_scope('speaker'):
                 if hp.num_speakers > 1:
-                    speaker_id = inputs['speaker']
-                    speaker_embed = tf.get_variable('speaker_embed',
-                                                    shape=(hp.num_speakers, hp.speaker_embed_dim),
-                                                    dtype=tf.float32)
-                    speaker_embed = tf.nn.embedding_lookup(speaker_embed, speaker_id)
+                    speaker_embedding = tf.get_variable('speaker_embed',
+                                                        shape=(hp.num_speakers, hp.speaker_embed_dim),
+                                                        dtype=tf.float32)
+                    # TODO: what about special initializer=tf.truncated_normal_initializer(stddev=0.5)?
+                    speaker_embd = tf.nn.embedding_lookup(speaker_embedding, speaker_ids)
                 else:
-                    speaker_embed = None
-
+                    speaker_embd = None
             # Encoder
             prenet_outputs = prenet(inputs=embedded_inputs,
                                     drop_rate=hp.drop_rate if is_training else 0.0,
@@ -54,18 +54,19 @@ class Tacotron():
                                     layer_sizes=[256, 128],
                                     scope="prenet")  # [N, T_in, 128]
             encoder_outputs = cbhg(prenet_outputs, input_lengths,
-                                   speaker_embed=speaker_embed,
+                                   speaker_embd=speaker_embd,
                                    is_training=is_training,
-                                   K=16,
+                                   K=hp.decoder_cbhg_banks,
                                    c=[128, 128],  # [N, T_in, 256]
                                    scope='encoder_cbhg')
 
             # Attention Mechanism
-            concat_cell = attention_decoder(encoder_outputs, hp.attention_dim, input_lengths, is_training)
+            attention_cell = attention_decoder(encoder_outputs, hp.attention_dim, input_lengths, is_training,
+                                               speaker_embd=speaker_embd)
 
             # Decoder (layers specified bottom to top):
             decoder_cell = MultiRNNCell([
-                OutputProjectionWrapper(concat_cell, hp.decoder_dim),  # 256
+                OutputProjectionWrapper(attention_cell, hp.decoder_dim),  # 256
                 ResidualWrapper(GRUCell(hp.decoder_dim)),  # 256
                 ResidualWrapper(GRUCell(hp.decoder_dim))  # 256
             ], state_is_tuple=True)  # [N, T_in, 256]
@@ -75,7 +76,7 @@ class Tacotron():
             decoder_init_state = output_cell.zero_state(batch_size=batch_size, dtype=tf.float32)
 
             if is_training:
-                helper = TacoTrainingHelper(inputs, mel_targets, hp.num_mels, hp.outputs_per_step)
+                helper = TacoTrainingHelper(text_inputs, mel_targets, hp.num_mels, hp.outputs_per_step)
             else:
                 helper = TacoTestHelper(batch_size, hp.num_mels, hp.outputs_per_step)
 
@@ -88,8 +89,9 @@ class Tacotron():
 
             # Add post-processing
             post_outputs = cbhg(mel_outputs, None,
+                                speaker_embd=None,
                                 is_training=is_training,
-                                K=8,
+                                K=hp.post_cbhg_banks,
                                 c=[256, hp.num_mels],
                                 scope='post_cbhg')  # [N, T_out, 256]
             linear_outputs = tf.layers.dense(post_outputs, hp.num_freq)  # [N, T_out, F]
@@ -97,7 +99,7 @@ class Tacotron():
             # Grab alignments from the final decoder state:
             alignments = tf.transpose(final_decoder_state[0].alignment_history.stack(), [1, 2, 0])
 
-            self.inputs = inputs
+            self.inputs = text_inputs
             self.input_lengths = input_lengths
             self.mel_outputs = mel_outputs
             self.linear_outputs = linear_outputs
@@ -110,7 +112,7 @@ class Tacotron():
             log('  encoder out:             %d' % encoder_outputs.shape[-1])
             # TODO: later work around for getting info back?
             # log('  attention out:           %d' % attention_cell.output_size)
-            log('  concat attn & out:       %d' % concat_cell.output_size)
+            log('  concat attn & out:       %d' % attention_cell.output_size)
             log('  decoder cell out:        %d' % decoder_cell.output_size)
             log('  decoder out (%d frames):  %d' % (hp.outputs_per_step, decoder_outputs.shape[-1]))
             log('  decoder out (1 frame):   %d' % mel_outputs.shape[-1])
