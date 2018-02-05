@@ -96,4 +96,5 @@ run*.sh
 
 logs
 data
+tmp
 .idea/

@@ -26,7 +26,7 @@ def prenet(inputs, drop_rate, is_training, layer_sizes, scope="prenet", reuse=No
     return x
 
 
-def attention_decoder(inputs, num_units, input_lengths, is_training, attention_type="bah",
+def attention_decoder(inputs, num_units, input_lengths, is_training, speaker_embd=None, attention_type="bah",
                       scope="attention_decoder", reuse=None):
     with tf.variable_scope(scope, reuse=reuse):
         if attention_type == 'bah_mon':
@@ -53,16 +53,17 @@ def attention_decoder(inputs, num_units, input_lengths, is_training, attention_t
 
         # Attention
         attention_cell = tf.contrib.seq2seq.AttentionWrapper(
-                models.rnn_wrappers.PrenetWrapper(GRUCell(num_units), [256, 128], is_training),  # 256
+                models.rnn_wrappers.PrenetWrapper(GRUCell(num_units), [256, 128], is_training,
+                                                  speaker_embd=speaker_embd),  # 256
                 attention_mechanism,  # 256
                 alignment_history=True,
                 output_attention=False)  # [N, T_in, 256]
         #  Concatenate attention context vector and RNN cell output into a 512D vector.
         concat_cell = models.rnn_wrappers.ConcatOutputAndAttentionWrapper(attention_cell)  # [N, T_in, 512]
-    return concat_cell
+        return concat_cell
 
 
-def cbhg(inputs, input_lengths, speaker_embed=None, is_training=True,
+def cbhg(inputs, input_lengths, speaker_embd=None, is_training=True,
          K=16, c=(128, 128), gru_units=128, num_highways=4, scope="cbhg"):
     with tf.variable_scope(scope):
         with tf.variable_scope('conv_bank'):
@@ -91,15 +92,16 @@ def cbhg(inputs, input_lengths, speaker_embed=None, is_training=True,
         for i in range(num_highways):
             with tf.variable_scope('highway_' + str(i)):
                 # site specific speaker embedding
-                if speaker_embed is not None:
-                    s = tf.layers.dense(speaker_embed, h.shape[-1], activation=tf.nn.softsign)
+                if speaker_embd is not None:
+                    s = tf.layers.dense(speaker_embd, h.shape[-1], activation=tf.nn.softsign)
                     s = tf.tile(tf.expand_dims(s, 1), [1, tf.shape(h)[1], 1])
                     h = tf.concat([h, s], -1)
                 h = highwaynet(h)
 
         # site specfic speaker embedding
-        if speaker_embed is not None:
-            s = tf.layers.dense(speaker_embed, gru_units, activation=tf.nn.softsign)
+        if speaker_embd is not None:
+            # TODO: what about two different s1, s2 for forwards and backwards
+            s = tf.layers.dense(speaker_embd, gru_units, activation=tf.nn.softsign)
         else:
             s = None
 
