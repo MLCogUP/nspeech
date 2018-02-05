@@ -1,7 +1,8 @@
 import tensorflow as tf
-from tensorflow.contrib.rnn import GRUCell
+from tensorflow.contrib.rnn import GRUCell, LSTMBlockCell
 
 import models.rnn_wrappers
+from models.attention import LocationSensitiveAttention
 
 
 def embedding(inputs, vocab_size, num_units, scope="embedding", reuse=None):
@@ -26,6 +27,37 @@ def prenet(inputs, drop_rate, is_training, layer_sizes, scope="prenet", reuse=No
     return x
 
 
+def conv_and_lstm(inputs, input_lengths, conv_layers, conv_width, conv_channels, lstm_units,
+                  is_training, scope):
+    # Convolutional layers
+    with tf.variable_scope(scope):
+        x = inputs
+        for i in range(conv_layers):
+            activation = tf.nn.relu if i < conv_layers - 1 else None
+            x = conv1d(x, conv_width, conv_channels, activation, is_training, 'conv_%d' % i)
+
+        # 2-layer bidirectional LSTM:
+        outputs, states = tf.nn.bidirectional_dynamic_rnn(
+                LSTMBlockCell(lstm_units),
+                LSTMBlockCell(lstm_units),
+                x,
+                sequence_length=input_lengths,
+                dtype=tf.float32,
+                scope='encoder_lstm')
+
+        # Concatentate forward and backwards:
+        return tf.concat(outputs, axis=2)
+
+
+def postnet(inputs, layers, conv_width, channels, is_training):
+    x = inputs
+    with tf.variable_scope('decoder_postnet'):
+        for i in range(layers):
+            activation = tf.nn.tanh if i < layers - 1 else None
+            x = conv1d(x, conv_width, channels, activation, is_training, 'postnet_conv_%d' % i)
+    return tf.layers.dense(x, inputs.shape[2])  # Project to input shape
+
+
 def attention_decoder(inputs, num_units, input_lengths, is_training, speaker_embd=None, attention_type="bah",
                       scope="attention_decoder", reuse=None):
     with tf.variable_scope(scope, reuse=reuse):
@@ -48,13 +80,20 @@ def attention_decoder(inputs, num_units, input_lengths, is_training, speaker_emb
                     inputs,
                     memory_sequence_length=input_lengths
             )
+        elif attention_type == "location_sensitive":
+            attention_mechanism = LocationSensitiveAttention(num_units, inputs)
         else:
             raise Exception("Unknown attention type ")
 
         # Attention
+        if attention_type == "location_sensitive":
+            pre_mechanism = models.rnn_wrappers.PrenetWrapper(GRUCell(num_units), [256, 128], is_training,
+                                                              speaker_embd=speaker_embd)
+        else:
+            pre_mechanism = models.rnn_wrappers.PrenetWrapper(GRUCell(num_units), [256, 128], is_training,
+                                                              speaker_embd=speaker_embd)
         attention_cell = tf.contrib.seq2seq.AttentionWrapper(
-                models.rnn_wrappers.PrenetWrapper(GRUCell(num_units), [256, 128], is_training,
-                                                  speaker_embd=speaker_embd),  # 256
+                pre_mechanism,  # 256
                 attention_mechanism,  # 256
                 alignment_history=True,
                 output_attention=False)  # [N, T_in, 256]
