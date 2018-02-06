@@ -1,14 +1,14 @@
 import tensorflow as tf
-from tensorflow.contrib.rnn import GRUCell, MultiRNNCell, OutputProjectionWrapper, ResidualWrapper
+from tensorflow.contrib.rnn import MultiRNNCell, OutputProjectionWrapper, LSTMBlockCell
 from tensorflow.contrib.seq2seq import BasicDecoder
 
 from models.utils.helpers import TacoTestHelper, TacoTrainingHelper
-from models.utils.modules import prenet, embedding, cbhg, attention_decoder
+from models.utils.modules import embedding, attention_decoder, conv_and_lstm, postnet
 from text.symbols import symbols
 from util.infolog import log
 
 
-class Tacotron():
+class Tacotron2():
     def __init__(self, hparams):
         self._hparams = hparams
 
@@ -47,29 +47,27 @@ class Tacotron():
                     speaker_embd = tf.nn.embedding_lookup(speaker_embedding, speaker_ids)
                 else:
                     speaker_embd = None
+
             # Encoder
-            prenet_outputs = prenet(inputs=embedded_inputs,
-                                    drop_rate=hp.drop_rate if is_training else 0.0,
-                                    is_training=is_training,
-                                    layer_sizes=[256, 128],
-                                    scope="prenet")  # [N, T_in, 128]
-            encoder_outputs = cbhg(prenet_outputs, input_lengths,
-                                   speaker_embd=speaker_embd,
-                                   is_training=is_training,
-                                   K=hp.decoder_cbhg_banks,
-                                   c=[128, 128],  # [N, T_in, 256]
-                                   scope='encoder_cbhg')
+            encoder_outputs = conv_and_lstm(
+                    embedded_inputs,
+                    input_lengths,
+                    conv_layers=hp.encoder_conv_layers,
+                    conv_width=hp.encoder_conv_width,
+                    conv_channels=hp.encoder_conv_channels,
+                    lstm_units=hp.encoder_lstm_units,
+                    is_training=is_training,
+                    scope='encoder')  # [N, T_in, 512]
 
             # Attention Mechanism
             attention_cell = attention_decoder(encoder_outputs, hp.attention_dim, input_lengths, is_training,
-                                               speaker_embd=speaker_embd)
+                                               speaker_embd=speaker_embd, attention_type="location_sensitive")
 
             # Decoder (layers specified bottom to top):
             decoder_cell = MultiRNNCell([
-                OutputProjectionWrapper(attention_cell, hp.decoder_dim),  # 256
-                ResidualWrapper(GRUCell(hp.decoder_dim)),  # 256
-                ResidualWrapper(GRUCell(hp.decoder_dim))  # 256
-            ], state_is_tuple=True)  # [N, T_in, 256]
+                attention_cell,
+                LSTMBlockCell(hp.decoder_lstm_units),
+                LSTMBlockCell(hp.decoder_lstm_units)], state_is_tuple=True)  # [N, T_in, 1024]
 
             # Project onto r mel spectrograms (predict r outputs at each RNN step):
             output_cell = OutputProjectionWrapper(decoder_cell, hp.num_mels * hp.outputs_per_step)
@@ -85,18 +83,31 @@ class Tacotron():
                     maximum_iterations=hp.max_iters)  # [N, T_out/r, M*r]
 
             # Reshape outputs to be one output per entry
-            mel_outputs = tf.reshape(decoder_outputs, [batch_size, -1, hp.num_mels])  # [N, T_out, M]
+            decoder_outputs = tf.reshape(decoder_outputs, [batch_size, -1, hp.num_mels])  # [N, T_out, M]
 
-            # Add post-processing
-            post_outputs = cbhg(mel_outputs, None,
-                                speaker_embd=None,
-                                is_training=is_training,
-                                K=hp.post_cbhg_banks,
-                                c=[256, hp.num_mels],
-                                scope='post_cbhg')  # [N, T_out, 256]
-            linear_outputs = tf.layers.dense(post_outputs, hp.num_freq)  # [N, T_out, F]
+            # Postnet: predicts a residual
+            postnet_outputs = postnet(
+                    decoder_outputs,
+                    layers=hp.postnet_conv_layers,
+                    conv_width=hp.postnet_conv_width,
+                    channels=hp.postnet_conv_channels,
+                    is_training=is_training)
+            mel_outputs = decoder_outputs + postnet_outputs
+
+            # Convert to linear using a similar architecture as the encoder:
+            expand_outputs = conv_and_lstm(
+                    mel_outputs,
+                    None,
+                    conv_layers=hp.expand_conv_layers,
+                    conv_width=hp.expand_conv_width,
+                    conv_channels=hp.expand_conv_channels,
+                    lstm_units=hp.expand_lstm_units,
+                    is_training=is_training,
+                    scope='expand')  # [N, T_in, 512]
+            linear_outputs = tf.layers.dense(expand_outputs, hp.num_freq)  # [N, T_out, F]
 
             # Grab alignments from the final decoder state:
+            # TODO: seems not to work?!?
             alignments = tf.transpose(final_decoder_state[0].alignment_history.stack(), [1, 2, 0])
 
             self.inputs = text_inputs
@@ -108,15 +119,12 @@ class Tacotron():
             self.linear_targets = linear_targets
             log('Initialized Tacotron model. Dimensions: ')
             log('  embedding:               %d' % embedded_inputs.shape[-1])
-            log('  prenet out:              %d' % prenet_outputs.shape[-1])
             log('  encoder out:             %d' % encoder_outputs.shape[-1])
-            # TODO: later work around for getting info back?
-            # log('  attention out:           %d' % attention_cell.output_size)
             log('  concat attn & out:       %d' % attention_cell.output_size)
             log('  decoder cell out:        %d' % decoder_cell.output_size)
             log('  decoder out (%d frames):  %d' % (hp.outputs_per_step, decoder_outputs.shape[-1]))
             log('  decoder out (1 frame):   %d' % mel_outputs.shape[-1])
-            log('  postnet out:             %d' % post_outputs.shape[-1])
+            log('  postnet out:             %d' % postnet_outputs.shape[-1])
             log('  linear out:              %d' % linear_outputs.shape[-1])
 
     def add_loss(self):
@@ -126,7 +134,7 @@ class Tacotron():
             self.mel_loss = tf.reduce_mean(tf.abs(self.mel_targets - self.mel_outputs))
             l1 = tf.abs(self.linear_targets - self.linear_outputs)
             # Prioritize loss for frequencies under 3000 Hz.
-            n_priority_freq = int(3000 / (hp.sample_rate * 0.5) * hp.num_freq)
+            n_priority_freq = int(2000 / (hp.sample_rate * 0.5) * hp.num_freq)
             self.linear_loss = 0.5 * tf.reduce_mean(l1) + 0.5 * tf.reduce_mean(l1[:, :, 0:n_priority_freq])
             self.loss = self.mel_loss + self.linear_loss
 
@@ -138,10 +146,9 @@ class Tacotron():
         '''
         with tf.variable_scope('optimizer'):
             hp = self._hparams
-            if hp.decay_learning_rate:
-                self.learning_rate = _learning_rate_decay(hp.initial_learning_rate, global_step)
-            else:
-                self.learning_rate = tf.convert_to_tensor(hp.initial_learning_rate)
+            # replace learning rate decay by exponential decay
+            self.learning_rate = tf.train.exponential_decay(
+                    hp.initial_learning_rate, global_step, hp.learning_rate_decay_halflife, 0.5)
             optimizer = tf.train.AdamOptimizer(self.learning_rate, hp.adam_beta1, hp.adam_beta2)
             gradients, variables = zip(*optimizer.compute_gradients(self.loss))
             self.gradients = gradients
@@ -179,10 +186,3 @@ class Tacotron():
             tf.summary.scalar('max_gradient_norm', tf.reduce_max(gradient_norms))
 
             self.stats = tf.summary.merge_all()
-
-
-def _learning_rate_decay(init_lr, global_step):
-    # Noam scheme from tensor2tensor:
-    warmup_steps = 4000.0
-    step = tf.cast(global_step + 1, dtype=tf.float32)
-    return init_lr * warmup_steps ** 0.5 * tf.minimum(step * warmup_steps ** -1.5, step ** -0.5)

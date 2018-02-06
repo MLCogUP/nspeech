@@ -108,7 +108,6 @@ def train(log_dir, args):
                                             args.model, commit, time_string(), step, loss))
                     log('%s, %s, %s, step=%d, loss=%.5f' % (args.model, commit, time_string(), step, loss))
                     log('Input: %s' % sequence_to_text(input_seq))
-                break
 
         except Exception as e:
             log('Exiting due to exception: %s' % e, slack=True)
