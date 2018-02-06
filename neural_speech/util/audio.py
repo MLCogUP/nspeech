@@ -30,7 +30,7 @@ def inv_preemphasis(x):
 def spectrogram(y):
     D = _stft(preemphasis(y))
     S = _amp_to_db(np.abs(D)) - hparams.ref_level_db
-    return _normalize(S)
+    return _normalize(S).astype(np.float32)
 
 
 def inv_spectrogram(spectrogram):
@@ -52,7 +52,7 @@ def inv_spectrogram_tensorflow(spectrogram):
 def melspectrogram(y):
     D = _stft(preemphasis(y))
     S = _amp_to_db(_linear_to_mel(np.abs(D)))
-    return _normalize(S)
+    return _normalize(S).astype(np.float32)
 
 
 def find_endpoint(wav, threshold_db=-40, min_silence_sec=0.8):

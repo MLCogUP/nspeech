@@ -36,7 +36,7 @@ def preprocess_pavoque(args, in_dir, out_dir):
 
 def preprocess_vctk(args, in_dir, out_dir):
     os.makedirs(out_dir, exist_ok=True)
-    metadata = datasets.vctk.build_from_path(in_dir, out_dir, args.num_workers, tqdm=tqdm)
+    metadata = datasets.vctk.build_from_path(in_dir, out_dir, args.num_workers, tqdm=tqdm, limit=args.limit)
     write_metadata(metadata, out_dir)
 
 

@@ -10,7 +10,9 @@ import numpy as np
 import tensorflow as tf
 
 from text import cmudict, text_to_sequence
+from util import audio
 from util.infolog import log
+import datasets.vctk
 
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
@@ -34,11 +36,19 @@ class DataFeeder(object):
         self._threads = []
 
         # Load metadata:
-        self._datadir = os.path.dirname(metadata_filename)
-        with open(metadata_filename, encoding='utf-8') as f:
-            self._metadata = [line.strip().split('|') for line in f]
-            hours = sum((int(x[3]) for x in self._metadata)) * hparams.frame_shift_ms / (3600 * 1000)
-            log('Loaded metadata for %d examples (%.2f hours)' % (len(self._metadata), hours))
+        # self._datadir = os.path.dirname(metadata_filename)
+        # with open(metadata_filename, encoding='utf-8') as f:
+        #     self._metadata = [line.strip().split('|') for line in f]
+        #     hours = sum((int(x[3]) for x in self._metadata)) * hparams.frame_shift_ms / (3600 * 1000)
+        #     log('Loaded metadata for %d examples (%.2f hours)' % (len(self._metadata), hours))
+
+        self._data_items = []
+        # if hparams.vctk_in:
+        print(metadata_filename)
+        self._data_items = list(datasets.vctk.load_file_names(metadata_filename))
+
+        log('Loaded data refs for %d examples' % len(self._data_items))
+
 
         # Create placeholders for inputs and targets. Don't specify batch size because we want to
         # be able to feed different sized batches at eval time.
@@ -65,15 +75,15 @@ class DataFeeder(object):
         # Load CMUDict: If enabled, this will randomly substitute some words in the training data with
         # their ARPABet equivalents, which will allow you to also pass ARPABet to the model for
         # synthesis (useful for proper nouns, etc.)
-        if hparams.use_cmudict:
-            cmudict_path = os.path.join(self._datadir, 'cmudict-0.7b')
-            if not os.path.isfile(cmudict_path):
-                raise Exception('If use_cmudict=True, you must download ' +
-                                'http://svn.code.sf.net/p/cmusphinx/code/trunk/cmudict/cmudict-0.7b to %s' % cmudict_path)
-            self._cmudict = cmudict.CMUDict(cmudict_path, keep_ambiguous=False)
-            log('Loaded CMUDict with %d unambiguous entries' % len(self._cmudict))
-        else:
-            self._cmudict = None
+        # if hparams.use_cmudict:
+        #     cmudict_path = os.path.join(self._datadir, 'cmudict-0.7b')
+        #     if not os.path.isfile(cmudict_path):
+        #         raise Exception('If use_cmudict=True, you must download ' +
+        #                         'http://svn.code.sf.net/p/cmusphinx/code/trunk/cmudict/cmudict-0.7b to %s' % cmudict_path)
+        #     self._cmudict = cmudict.CMUDict(cmudict_path, keep_ambiguous=False)
+        #     log('Loaded CMUDict with %d unambiguous entries' % len(self._cmudict))
+        # else:
+        self._cmudict = None
 
     def start_threads(self, n_threads=1):
         for _ in range(n_threads):
@@ -122,18 +132,13 @@ class DataFeeder(object):
 
     def _get_next_example(self):
         '''Loads a single example (input, speaker_id, mel_target, linear_target, cost) from disk'''
-        if self._offset >= len(self._metadata):
+        if self._offset >= len(self._data_items):
             self._offset = 0
-            random.shuffle(self._metadata)
-        meta = self._metadata[self._offset]
+            random.shuffle(self._data_items)
+        wav_path, text, speaker_id = self._data_items[self._offset]
         self._offset += 1
 
-        # TODO: remove work around for old data files
-        if len(meta) == 6:
-            wav_fn, spectrogram_fn, mel_fn, n_frames, text, speaker_id = meta
-        else:
-            wav_fn, spectrogram_fn, mel_fn, n_frames, text = meta
-            speaker_id = 1
+        wav_fn, linear_target, mel_target, n_frames = _process_utterance(wav_path)
 
         if self._cmudict and random.random() < _p_cmudict:
             text = ' '.join([self._maybe_get_arpabet(word) for word in text.split(' ')])
@@ -141,8 +146,6 @@ class DataFeeder(object):
         input_data = np.asarray(text_to_sequence(text, self._cleaner_names), dtype=np.int32)
         # load spectrograms given by path in csv file
         # TODO: try generating spectrograms on demand
-        linear_target = np.load(os.path.join(self._datadir, spectrogram_fn))
-        mel_target = np.load(os.path.join(self._datadir, mel_fn))
         return input_data, speaker_id, mel_target, linear_target, len(linear_target)
 
     def _maybe_get_arpabet(self, word):
@@ -194,3 +197,21 @@ def generate_attention_plot(alignments):
     plot = tf.image.decode_png(buf.getvalue(), channels=4)
     plot = tf.expand_dims(plot, 0)
     return plot
+
+
+def _process_utterance(wav_path):
+    wav_fn = os.path.basename(wav_path)
+
+    # Load the audio to a numpy array:
+    # wav = _trim_wav(audio.load_wav(wav_path))
+    wav = audio.load_wav(wav_path)
+
+    # Compute the linear-scale spectrogram from the wav:
+    spectrogram = audio.spectrogram(wav)
+    n_frames = spectrogram.shape[1]
+
+    # Compute a mel-scale spectrogram from the wav:
+    mel_spectrogram = audio.melspectrogram(wav)
+
+    # Return a tuple describing this training example:
+    return wav_fn, spectrogram.T, mel_spectrogram.T, n_frames
