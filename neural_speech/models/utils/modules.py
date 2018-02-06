@@ -1,8 +1,8 @@
 import tensorflow as tf
 from tensorflow.contrib.rnn import GRUCell, LSTMBlockCell
 
-import models.rnn_wrappers
-from models.attention import LocationSensitiveAttention
+import models.utils.rnn_wrappers
+from models.utils.attention import LocationSensitiveAttention
 
 
 def embedding(inputs, vocab_size, num_units, scope="embedding", reuse=None):
@@ -87,18 +87,18 @@ def attention_decoder(inputs, num_units, input_lengths, is_training, speaker_emb
 
         # Attention
         if attention_type == "location_sensitive":
-            pre_mechanism = models.rnn_wrappers.PrenetWrapper(GRUCell(num_units), [256, 128], is_training,
-                                                              speaker_embd=speaker_embd)
+            pre_mechanism = models.utils.rnn_wrappers.PrenetWrapper(GRUCell(num_units), [256, 128], is_training,
+                                                                    speaker_embd=speaker_embd)
         else:
-            pre_mechanism = models.rnn_wrappers.PrenetWrapper(GRUCell(num_units), [256, 128], is_training,
-                                                              speaker_embd=speaker_embd)
+            pre_mechanism = models.utils.rnn_wrappers.PrenetWrapper(GRUCell(num_units), [256, 128], is_training,
+                                                                    speaker_embd=speaker_embd)
         attention_cell = tf.contrib.seq2seq.AttentionWrapper(
                 pre_mechanism,  # 256
                 attention_mechanism,  # 256
                 alignment_history=True,
                 output_attention=False)  # [N, T_in, 256]
         #  Concatenate attention context vector and RNN cell output into a 512D vector.
-        concat_cell = models.rnn_wrappers.ConcatOutputAndAttentionWrapper(attention_cell)  # [N, T_in, 512]
+        concat_cell = models.utils.rnn_wrappers.ConcatOutputAndAttentionWrapper(attention_cell)  # [N, T_in, 512]
         return concat_cell
 
 

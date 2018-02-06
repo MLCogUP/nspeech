@@ -2,10 +2,10 @@ import tensorflow as tf
 from tensorflow.contrib.rnn import GRUCell, MultiRNNCell, OutputProjectionWrapper, ResidualWrapper
 from tensorflow.contrib.seq2seq import BasicDecoder
 
-from models.modules import prenet, embedding, cbhg, attention_decoder
+from models.utils.helpers import TacoTestHelper, TacoTrainingHelper
+from models.utils.modules import prenet, embedding, cbhg, attention_decoder
 from text.symbols import symbols
 from util.infolog import log
-from .helpers import TacoTestHelper, TacoTrainingHelper
 
 
 class Tacotron():
@@ -18,7 +18,7 @@ class Tacotron():
         Sets "mel_outputs", "linear_outputs", and "alignments" fields.
 
         Args:
-          inputs: int32 Tensor with shape [N, T_in] where N is batch size, T_in is number of
+          text_inputs: int32 Tensor with shape [N, T_in] where N is batch size, T_in is number of
             steps in the input time series, and values are character IDs
           input_lengths: int32 Tensor with shape [N] where N is batch size and values are the lengths
             of each sequence in inputs.

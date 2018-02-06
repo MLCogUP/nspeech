@@ -2,10 +2,10 @@ import tensorflow as tf
 from tensorflow.contrib.rnn import MultiRNNCell, OutputProjectionWrapper, LSTMBlockCell
 from tensorflow.contrib.seq2seq import BasicDecoder
 
-from models.modules import embedding, attention_decoder, conv_and_lstm, postnet
+from models.utils.helpers import TacoTestHelper, TacoTrainingHelper
+from models.utils.modules import embedding, attention_decoder, conv_and_lstm, postnet
 from text.symbols import symbols
 from util.infolog import log
-from .helpers import TacoTestHelper, TacoTrainingHelper
 
 
 class Tacotron2():
@@ -18,7 +18,7 @@ class Tacotron2():
         Sets "mel_outputs", "linear_outputs", and "alignments" fields.
 
         Args:
-          inputs: int32 Tensor with shape [N, T_in] where N is batch size, T_in is number of
+          text_inputs: int32 Tensor with shape [N, T_in] where N is batch size, T_in is number of
             steps in the input time series, and values are character IDs
           input_lengths: int32 Tensor with shape [N] where N is batch size and values are the lengths
             of each sequence in inputs.
@@ -107,9 +107,9 @@ class Tacotron2():
             linear_outputs = tf.layers.dense(expand_outputs, hp.num_freq)  # [N, T_out, F]
 
             # Grab alignments from the final decoder state:
+            # TODO: seems not to work?!?
             alignments = tf.transpose(final_decoder_state[0].alignment_history.stack(), [1, 2, 0])
 
-            # TODO: add precise
             self.inputs = text_inputs
             self.input_lengths = input_lengths
             self.mel_outputs = mel_outputs
@@ -118,17 +118,14 @@ class Tacotron2():
             self.mel_targets = mel_targets
             self.linear_targets = linear_targets
             log('Initialized Tacotron model. Dimensions: ')
-            # log('  embedding:               %d' % embedded_inputs.shape[-1])
-            # log('  prenet out:              %d' % prenet_outputs.shape[-1])
-            # log('  encoder out:             %d' % encoder_outputs.shape[-1])
-            # TODO: later work around for getting info back?
-            # log('  attention out:           %d' % attention_cell.output_size)
-            # log('  concat attn & out:       %d' % attention_cell.output_size)
-            # log('  decoder cell out:        %d' % decoder_cell.output_size)
-            # log('  decoder out (%d frames):  %d' % (hp.outputs_per_step, decoder_outputs.shape[-1]))
-            # log('  decoder out (1 frame):   %d' % mel_outputs.shape[-1])
-            # log('  postnet out:             %d' % post_outputs.shape[-1])
-            # log('  linear out:              %d' % linear_outputs.shape[-1])
+            log('  embedding:               %d' % embedded_inputs.shape[-1])
+            log('  encoder out:             %d' % encoder_outputs.shape[-1])
+            log('  concat attn & out:       %d' % attention_cell.output_size)
+            log('  decoder cell out:        %d' % decoder_cell.output_size)
+            log('  decoder out (%d frames):  %d' % (hp.outputs_per_step, decoder_outputs.shape[-1]))
+            log('  decoder out (1 frame):   %d' % mel_outputs.shape[-1])
+            log('  postnet out:             %d' % postnet_outputs.shape[-1])
+            log('  linear out:              %d' % linear_outputs.shape[-1])
 
     def add_loss(self):
         '''Adds loss to the model. Sets "loss" field. initialize must have been called.'''
@@ -149,11 +146,7 @@ class Tacotron2():
         '''
         with tf.variable_scope('optimizer'):
             hp = self._hparams
-            # TODO: remove decay learning rate?
-            # if hp.decay_learning_rate:
-            #     self.learning_rate = _learning_rate_decay(hp.initial_learning_rate, global_step)
-            # else:
-            #     self.learning_rate = tf.convert_to_tensor(hp.initial_learning_rate)
+            # replace learning rate decay by exponential decay
             self.learning_rate = tf.train.exponential_decay(
                     hp.initial_learning_rate, global_step, hp.learning_rate_decay_halflife, 0.5)
             optimizer = tf.train.AdamOptimizer(self.learning_rate, hp.adam_beta1, hp.adam_beta2)
@@ -193,9 +186,3 @@ class Tacotron2():
             tf.summary.scalar('max_gradient_norm', tf.reduce_max(gradient_norms))
 
             self.stats = tf.summary.merge_all()
-
-# def _learning_rate_decay(init_lr, global_step):
-#     # Noam scheme from tensor2tensor:
-#     warmup_steps = 4000.0
-#     step = tf.cast(global_step + 1, dtype=tf.float32)
-#     return init_lr * warmup_steps ** 0.5 * tf.minimum(step * warmup_steps ** -1.5, step ** -0.5)

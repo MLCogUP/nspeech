@@ -1,5 +1,6 @@
 import tensorflow as tf
 from tensorflow.contrib.seq2seq import BahdanauAttention
+from tensorflow.python.ops import array_ops
 
 
 class LocationSensitiveAttention(BahdanauAttention):
