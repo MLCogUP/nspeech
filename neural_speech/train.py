@@ -3,10 +3,8 @@ import matplotlib
 matplotlib.use('Agg')
 
 import argparse
-from datetime import datetime
 import math
 import os
-import subprocess
 import time
 import tensorflow as tf
 import traceback
@@ -15,20 +13,8 @@ from datasets.datafeeder import DataFeeder
 from hparams import hparams, hparams_debug_string
 from models import create_model
 from text import sequence_to_text
-from util import audio, infolog, ValueWindow, plot
-
-log = infolog.log
-
-
-def get_git_commit():
-    subprocess.check_output(['git', 'diff-index', '--quiet', 'HEAD'])  # Verify client is clean
-    commit = subprocess.check_output(['git', 'rev-parse', 'HEAD']).decode().strip()[:10]
-    log('Git commit: %s' % commit)
-    return commit
-
-
-def time_string():
-    return datetime.now().strftime('%Y-%m-%d %H:%M')
+from util import audio, ValueWindow, plot, get_git_commit, time_string, infolog
+from util.infolog import log
 
 
 def train(log_dir, args):

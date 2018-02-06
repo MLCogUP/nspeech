@@ -126,7 +126,7 @@ class Tacotron():
             self.mel_loss = tf.reduce_mean(tf.abs(self.mel_targets - self.mel_outputs))
             l1 = tf.abs(self.linear_targets - self.linear_outputs)
             # Prioritize loss for frequencies under 3000 Hz.
-            n_priority_freq = int(3000 / (hp.sample_rate * 0.5) * hp.num_freq)
+            n_priority_freq = int(2000 / (hp.sample_rate * 0.5) * hp.num_freq)
             self.linear_loss = 0.5 * tf.reduce_mean(l1) + 0.5 * tf.reduce_mean(l1[:, :, 0:n_priority_freq])
             self.loss = self.mel_loss + self.linear_loss
 

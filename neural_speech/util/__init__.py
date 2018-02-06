@@ -1,3 +1,9 @@
+import subprocess
+from datetime import datetime
+
+from .infolog import log
+
+
 class ValueWindow():
     def __init__(self, window_size=100):
         self._window_size = window_size
@@ -20,3 +26,14 @@ class ValueWindow():
 
     def reset(self):
         self._values = []
+
+
+def get_git_commit():
+    subprocess.check_output(['git', 'diff-index', '--quiet', 'HEAD'])  # Verify client is clean
+    commit = subprocess.check_output(['git', 'rev-parse', 'HEAD']).decode().strip()[:10]
+    log('Git commit: %s' % commit)
+    return commit
+
+
+def time_string():
+    return datetime.now().strftime('%Y-%m-%d %H:%M')
