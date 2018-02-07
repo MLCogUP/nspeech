@@ -1,4 +1,3 @@
-import io
 import os
 import random
 import threading
@@ -17,7 +16,6 @@ from util import audio
 from util.infolog import log
 
 matplotlib.use('Agg')
-import matplotlib.pyplot as plt
 
 _p_cmudict = 0.5
 _pad = 0
@@ -37,13 +35,6 @@ class DataFeeder(object):
         self._session = sess
         self._threads = []
 
-        # Load metadata:
-        # self._datadir = os.path.dirname(metadata_filename)
-        # with open(metadata_filename, encoding='utf-8') as f:
-        #     self._metadata = [line.strip().split('|') for line in f]
-        #     hours = sum((int(x[3]) for x in self._metadata)) * hparams.frame_shift_ms / (3600 * 1000)
-        #     log('Loaded metadata for %d examples (%.2f hours)' % (len(self._metadata), hours))
-
         self._data_items = []
         # TODO: support more corpora by this function
         path_to_function = {
@@ -52,9 +43,6 @@ class DataFeeder(object):
         }
         for data_type, data_source in input_paths.items():
             self._data_items.extend(list(path_to_function[data_type](data_source)))
-
-        # print(metadata_filename)
-        # self._data_items = list(datasets.vctk.load_file_names(metadata_filename))
 
         log('Loaded data refs for %d examples' % len(self._data_items))
         assert len(self._data_items) > 0, "No data found"
@@ -66,20 +54,23 @@ class DataFeeder(object):
             tf.placeholder(tf.int32, [None], 'input_lengths'),
             tf.placeholder(tf.int32, [None], 'speaker_ids'),
             tf.placeholder(tf.float32, [None, None, hparams.num_mels], 'mel_targets'),
-            tf.placeholder(tf.float32, [None, None, hparams.num_freq], 'linear_targets')
+            tf.placeholder(tf.float32, [None, None, hparams.num_freq], 'linear_targets'),
+            tf.placeholder(tf.float32, [None, 1], 'audio')
         ]
 
         # Create queue for buffering data:
-        queue = tf.FIFOQueue(hparams.queue_size,
-                             [tf.int32, tf.int32, tf.int32, tf.float32, tf.float32],
-                             name='input_queue')
+        queue = tf.RandomShuffleQueue(hparams.queue_size,
+                                      min_after_dequeue=int(0.8 * hparams.queue_size),
+                                      dtypes=[tf.int32, tf.int32, tf.int32, tf.float32, tf.float32, tf.float32],
+                                      name='input_queue')
         self._enqueue_op = queue.enqueue(self._placeholders)
-        self.inputs, self.input_lengths, self.speaker_ids, self.mel_targets, self.linear_targets = queue.dequeue()
+        self.inputs, self.input_lengths, self.speaker_ids, self.mel_targets, self.linear_targets, self.audio = queue.dequeue()
         self.inputs.set_shape(self._placeholders[0].shape)
         self.input_lengths.set_shape(self._placeholders[1].shape)
         self.speaker_ids.set_shape(self._placeholders[2].shape)
         self.mel_targets.set_shape(self._placeholders[3].shape)
         self.linear_targets.set_shape(self._placeholders[4].shape)
+        self.audio.set_shape(self._placeholders[5].shape)
 
         # Load CMUDict: If enabled, this will randomly substitute some words in the training data with
         # their ARPABet equivalents, which will allow you to also pass ARPABet to the model for
@@ -147,15 +138,13 @@ class DataFeeder(object):
         wav_path, text, speaker_id = self._data_items[self._offset]
         self._offset += 1
 
-        wav_fn, linear_target, mel_target, n_frames = _process_utterance(wav_path)
+        wav_fn, wav, linear_target, mel_target, n_frames = _process_utterance(wav_path)
 
         if self._cmudict and random.random() < _p_cmudict:
             text = ' '.join([self._maybe_get_arpabet(word) for word in text.split(' ')])
         # encode text sequence information
         input_data = np.asarray(text_to_sequence(text, self._cleaner_names), dtype=np.int32)
-        # load spectrograms given by path in csv file
-        # TODO: try generating spectrograms on demand
-        return input_data, speaker_id, mel_target, linear_target, len(linear_target)
+        return input_data, wav, speaker_id, mel_target, linear_target, len(linear_target)
 
     def _maybe_get_arpabet(self, word):
         arpabet = self._cmudict.lookup(word)
@@ -165,11 +154,15 @@ class DataFeeder(object):
 def _prepare_batch(batch, outputs_per_step):
     random.shuffle(batch)
     inputs = _prepare_inputs([x[0] for x in batch])
+    print(">>", inputs.shape)
     input_lengths = np.asarray([len(x[0]) for x in batch], dtype=np.int32)
-    speaker_ids = np.asarray([x[1] for x in batch], dtype=np.int32)
-    mel_targets = _prepare_targets([x[2] for x in batch], outputs_per_step)
-    linear_targets = _prepare_targets([x[3] for x in batch], outputs_per_step)
-    return inputs, input_lengths, speaker_ids, mel_targets, linear_targets
+    print(">>", batch[0][1].shape)
+    audios = np.asarray([x[1] for x in batch], dtype=np.float32)
+    print(">>", audios.shape)
+    speaker_ids = np.asarray([x[2] for x in batch], dtype=np.int32)
+    mel_targets = _prepare_targets([x[3] for x in batch], outputs_per_step)
+    linear_targets = _prepare_targets([x[4] for x in batch], outputs_per_step)
+    return inputs, input_lengths, speaker_ids, mel_targets, linear_targets, audios
 
 
 def _prepare_inputs(inputs):
@@ -195,19 +188,6 @@ def _round_up(x, multiple):
     return x if remainder == 0 else x + multiple - remainder
 
 
-def generate_attention_plot(alignments):
-    print(alignments)
-    plt.imshow(alignments, cmap='hot', interpolation='nearest')
-    plt.ylabel('Decoder Steps')
-    plt.xlabel('Encoder Steps')
-    buf = io.BytesIO()
-    plt.savefig(buf, format='png')
-    buf.seek(0)
-    plot = tf.image.decode_png(buf.getvalue(), channels=4)
-    plot = tf.expand_dims(plot, 0)
-    return plot
-
-
 def _process_utterance(wav_path):
     wav_fn = os.path.basename(wav_path)
 
@@ -223,7 +203,7 @@ def _process_utterance(wav_path):
     mel_spectrogram = audio.melspectrogram(wav)
 
     # Return a tuple describing this training example:
-    return wav_fn, spectrogram.T, mel_spectrogram.T, n_frames
+    return wav_fn, wav, spectrogram.T, mel_spectrogram.T, n_frames
 
 
 def trim_wav(wav, threshold_db=25):
