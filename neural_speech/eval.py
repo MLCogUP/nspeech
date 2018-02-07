@@ -29,7 +29,7 @@ def get_output_base_path(checkpoint_path):
 def run_eval(args):
     print(hparams_debug_string())
     synth = Synthesizer()
-    synth.load(args.checkpoint)
+    synth.load(args.checkpoint, args.model)
     base_path = get_output_base_path(args.checkpoint)
     simple_eval(args, synth, base_path)
     harvard_eval(args, synth, base_path)
@@ -58,6 +58,7 @@ def harvard_eval(args, synth, base_path):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--checkpoint', required=True, help='Path to model checkpoint')
+    parser.add_argument('--model', default='tacotron')
     parser.add_argument('--hparams', default='',
                         help='Hyperparameter overrides as a comma-separated list of name=value pairs')
     parser.add_argument('--gpu', default=0, type=int, help='Select gpu for computation')
