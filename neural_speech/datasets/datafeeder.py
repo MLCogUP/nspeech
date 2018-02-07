@@ -5,14 +5,16 @@ import threading
 import time
 import traceback
 
+import librosa
 import matplotlib
 import numpy as np
 import tensorflow as tf
 
-from text import cmudict, text_to_sequence
+import datasets.ljspeech
+import datasets.vctk
+from text import text_to_sequence
 from util import audio
 from util.infolog import log
-import datasets.vctk
 
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
@@ -26,7 +28,7 @@ _pad = 0
 class DataFeeder(object):
     '''Feeds batches of data into a queue on a background thread.'''
 
-    def __init__(self, sess, coordinator, metadata_filename, hparams):
+    def __init__(self, sess, coordinator, input_paths, hparams):
         super(DataFeeder, self).__init__()
         self._coord = coordinator
         self._hparams = hparams
@@ -43,12 +45,19 @@ class DataFeeder(object):
         #     log('Loaded metadata for %d examples (%.2f hours)' % (len(self._metadata), hours))
 
         self._data_items = []
-        # if hparams.vctk_in:
-        print(metadata_filename)
-        self._data_items = list(datasets.vctk.load_file_names(metadata_filename))
+        # TODO: support more corpora by this function
+        path_to_function = {
+            "vctk": datasets.vctk.load_file_names,
+            "ljspeech": datasets.ljspeech.load_file_names
+        }
+        for data_type, data_source in input_paths.items():
+            self._data_items.extend(list(path_to_function[data_type](data_source)))
+
+        # print(metadata_filename)
+        # self._data_items = list(datasets.vctk.load_file_names(metadata_filename))
 
         log('Loaded data refs for %d examples' % len(self._data_items))
-
+        assert len(self._data_items) > 0, "No data found"
 
         # Create placeholders for inputs and targets. Don't specify batch size because we want to
         # be able to feed different sized batches at eval time.
@@ -204,7 +213,7 @@ def _process_utterance(wav_path):
 
     # Load the audio to a numpy array:
     # wav = _trim_wav(audio.load_wav(wav_path))
-    wav = audio.load_wav(wav_path)
+    wav = trim_wav(audio.load_wav(wav_path))
 
     # Compute the linear-scale spectrogram from the wav:
     spectrogram = audio.spectrogram(wav)
@@ -215,3 +224,23 @@ def _process_utterance(wav_path):
 
     # Return a tuple describing this training example:
     return wav_fn, spectrogram.T, mel_spectrogram.T, n_frames
+
+
+def trim_wav(wav, threshold_db=25):
+    '''Trims silence from the ends of the wav'''
+    splits = librosa.effects.split(wav, threshold_db, frame_length=1024, hop_length=512)
+    return wav[_find_start(splits):_find_end(splits, len(wav))]
+
+
+def _find_start(splits, min_samples=2000):
+    for split_start, split_end in splits:
+        if split_end - split_start > min_samples:
+            return max(0, split_start - min_samples)
+    return 0
+
+
+def _find_end(splits, num_samples, min_samples=2000):
+    for split_start, split_end in reversed(splits):
+        if split_end - split_start > min_samples:
+            return min(num_samples, split_end + min_samples)
+    return num_samples
