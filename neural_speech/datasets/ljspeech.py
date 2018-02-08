@@ -3,7 +3,33 @@ from concurrent.futures import ProcessPoolExecutor
 from functools import partial
 
 import numpy as np
+
 from util import audio
+
+
+def load_file_names(in_dir):
+    with open(os.path.join(in_dir, 'metadata.csv'), encoding='utf-8') as f:
+        for line in f:
+            parts = line.strip().split('|')
+            wav_path = os.path.join(in_dir, 'wavs', '%s.wav' % parts[0])
+            text = parts[2]
+            speaker_id = 0
+            yield wav_path, text, speaker_id
+
+
+def load_libre_2(in_dir):
+    # example (line break over comma)
+    # 1272-128104-0012,
+    # dev-clean/dev-clean/1272/128104/1272-128104-0012.flac,
+    # only unfortunately his own work never does get good,
+    # training
+    with open(os.path.join(in_dir, 'corpus.csv'), encoding='utf-8') as f:
+        for line in f:
+            identifier, path, text, mode = line.strip().split(',')
+            speaker_id, chapter, utterance = identifier.split("-")
+            wav_path = os.path.join(in_dir, path)
+            # TODO: need filters? e.g. mode is training
+            yield wav_path, text, speaker_id
 
 
 def build_from_path(in_dir, out_dir, num_workers=1, tqdm=lambda x: x):
@@ -77,4 +103,4 @@ def _process_utterance(out_dir, index, wav_path, text):
             np.save(mel_path, mel_spectrogram.T, allow_pickle=False)
 
     # Return a tuple describing this training example:
-    return  wav_fn, spectrogram_fn, mel_fn, n_frames, text, 1
+    return wav_fn, spectrogram_fn, mel_fn, n_frames, text, 1

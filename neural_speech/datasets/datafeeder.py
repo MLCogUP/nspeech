@@ -1,19 +1,21 @@
-import io
 import os
 import random
 import threading
 import time
 import traceback
 
+import librosa
 import matplotlib
 import numpy as np
 import tensorflow as tf
 
-from text import cmudict, text_to_sequence
+import datasets.ljspeech
+import datasets.vctk
+from text import text_to_sequence
+from util import audio
 from util.infolog import log
 
 matplotlib.use('Agg')
-import matplotlib.pyplot as plt
 
 _p_cmudict = 0.5
 _pad = 0
@@ -24,7 +26,7 @@ _pad = 0
 class DataFeeder(object):
     '''Feeds batches of data into a queue on a background thread.'''
 
-    def __init__(self, sess, coordinator, metadata_filename, hparams):
+    def __init__(self, sess, coordinator, input_paths, hparams):
         super(DataFeeder, self).__init__()
         self._coord = coordinator
         self._hparams = hparams
@@ -33,12 +35,18 @@ class DataFeeder(object):
         self._session = sess
         self._threads = []
 
-        # Load metadata:
-        self._datadir = os.path.dirname(metadata_filename)
-        with open(metadata_filename, encoding='utf-8') as f:
-            self._metadata = [line.strip().split('|') for line in f]
-            hours = sum((int(x[3]) for x in self._metadata)) * hparams.frame_shift_ms / (3600 * 1000)
-            log('Loaded metadata for %d examples (%.2f hours)' % (len(self._metadata), hours))
+        self._data_items = []
+        # TODO: support more corpora by this function
+        path_to_function = {
+            "vctk": datasets.vctk.load_file_names,
+            "ljspeech": datasets.ljspeech.load_file_names,
+            "librispeech": datasets.ljspeech.load_libre_2
+        }
+        for data_type, data_source in input_paths.items():
+            self._data_items.extend(list(path_to_function[data_type](data_source)))
+
+        log('Loaded data refs for %d examples' % len(self._data_items))
+        assert len(self._data_items) > 0, "No data found"
 
         # Create placeholders for inputs and targets. Don't specify batch size because we want to
         # be able to feed different sized batches at eval time.
@@ -47,33 +55,36 @@ class DataFeeder(object):
             tf.placeholder(tf.int32, [None], 'input_lengths'),
             tf.placeholder(tf.int32, [None], 'speaker_ids'),
             tf.placeholder(tf.float32, [None, None, hparams.num_mels], 'mel_targets'),
-            tf.placeholder(tf.float32, [None, None, hparams.num_freq], 'linear_targets')
+            tf.placeholder(tf.float32, [None, None, hparams.num_freq], 'linear_targets'),
+            tf.placeholder(tf.float32, [None, 1], 'audio')
         ]
 
         # Create queue for buffering data:
-        queue = tf.FIFOQueue(hparams.queue_size,
-                             [tf.int32, tf.int32, tf.int32, tf.float32, tf.float32],
-                             name='input_queue')
+        queue = tf.RandomShuffleQueue(hparams.queue_size,
+                                      min_after_dequeue=int(0.8 * hparams.queue_size),
+                                      dtypes=[tf.int32, tf.int32, tf.int32, tf.float32, tf.float32, tf.float32],
+                                      name='input_queue')
         self._enqueue_op = queue.enqueue(self._placeholders)
-        self.inputs, self.input_lengths, self.speaker_ids, self.mel_targets, self.linear_targets = queue.dequeue()
+        self.inputs, self.input_lengths, self.speaker_ids, self.mel_targets, self.linear_targets, self.audio = queue.dequeue()
         self.inputs.set_shape(self._placeholders[0].shape)
         self.input_lengths.set_shape(self._placeholders[1].shape)
         self.speaker_ids.set_shape(self._placeholders[2].shape)
         self.mel_targets.set_shape(self._placeholders[3].shape)
         self.linear_targets.set_shape(self._placeholders[4].shape)
+        self.audio.set_shape(self._placeholders[5].shape)
 
         # Load CMUDict: If enabled, this will randomly substitute some words in the training data with
         # their ARPABet equivalents, which will allow you to also pass ARPABet to the model for
         # synthesis (useful for proper nouns, etc.)
-        if hparams.use_cmudict:
-            cmudict_path = os.path.join(self._datadir, 'cmudict-0.7b')
-            if not os.path.isfile(cmudict_path):
-                raise Exception('If use_cmudict=True, you must download ' +
-                                'http://svn.code.sf.net/p/cmusphinx/code/trunk/cmudict/cmudict-0.7b to %s' % cmudict_path)
-            self._cmudict = cmudict.CMUDict(cmudict_path, keep_ambiguous=False)
-            log('Loaded CMUDict with %d unambiguous entries' % len(self._cmudict))
-        else:
-            self._cmudict = None
+        # if hparams.use_cmudict:
+        #     cmudict_path = os.path.join(self._datadir, 'cmudict-0.7b')
+        #     if not os.path.isfile(cmudict_path):
+        #         raise Exception('If use_cmudict=True, you must download ' +
+        #                         'http://svn.code.sf.net/p/cmusphinx/code/trunk/cmudict/cmudict-0.7b to %s' % cmudict_path)
+        #     self._cmudict = cmudict.CMUDict(cmudict_path, keep_ambiguous=False)
+        #     log('Loaded CMUDict with %d unambiguous entries' % len(self._cmudict))
+        # else:
+        self._cmudict = None
 
     def start_threads(self, n_threads=1):
         for _ in range(n_threads):
@@ -122,28 +133,19 @@ class DataFeeder(object):
 
     def _get_next_example(self):
         '''Loads a single example (input, speaker_id, mel_target, linear_target, cost) from disk'''
-        if self._offset >= len(self._metadata):
+        if self._offset >= len(self._data_items):
             self._offset = 0
-            random.shuffle(self._metadata)
-        meta = self._metadata[self._offset]
+            random.shuffle(self._data_items)
+        wav_path, text, speaker_id = self._data_items[self._offset]
         self._offset += 1
 
-        # TODO: remove work around for old data files
-        if len(meta) == 6:
-            wav_fn, spectrogram_fn, mel_fn, n_frames, text, speaker_id = meta
-        else:
-            wav_fn, spectrogram_fn, mel_fn, n_frames, text = meta
-            speaker_id = 1
+        wav_fn, wav, linear_target, mel_target, n_frames = _process_utterance(wav_path)
 
         if self._cmudict and random.random() < _p_cmudict:
             text = ' '.join([self._maybe_get_arpabet(word) for word in text.split(' ')])
         # encode text sequence information
         input_data = np.asarray(text_to_sequence(text, self._cleaner_names), dtype=np.int32)
-        # load spectrograms given by path in csv file
-        # TODO: try generating spectrograms on demand
-        linear_target = np.load(os.path.join(self._datadir, spectrogram_fn))
-        mel_target = np.load(os.path.join(self._datadir, mel_fn))
-        return input_data, speaker_id, mel_target, linear_target, len(linear_target)
+        return input_data, wav, speaker_id, mel_target, linear_target, len(linear_target)
 
     def _maybe_get_arpabet(self, word):
         arpabet = self._cmudict.lookup(word)
@@ -153,11 +155,15 @@ class DataFeeder(object):
 def _prepare_batch(batch, outputs_per_step):
     random.shuffle(batch)
     inputs = _prepare_inputs([x[0] for x in batch])
+    print(">>", inputs.shape)
     input_lengths = np.asarray([len(x[0]) for x in batch], dtype=np.int32)
-    speaker_ids = np.asarray([x[1] for x in batch], dtype=np.int32)
-    mel_targets = _prepare_targets([x[2] for x in batch], outputs_per_step)
-    linear_targets = _prepare_targets([x[3] for x in batch], outputs_per_step)
-    return inputs, input_lengths, speaker_ids, mel_targets, linear_targets
+    print(">>", batch[0][1].shape)
+    audios = np.asarray([x[1] for x in batch], dtype=np.float32)
+    print(">>", audios.shape)
+    speaker_ids = np.asarray([x[2] for x in batch], dtype=np.int32)
+    mel_targets = _prepare_targets([x[3] for x in batch], outputs_per_step)
+    linear_targets = _prepare_targets([x[4] for x in batch], outputs_per_step)
+    return inputs, input_lengths, speaker_ids, mel_targets, linear_targets, audios
 
 
 def _prepare_inputs(inputs):
@@ -183,14 +189,39 @@ def _round_up(x, multiple):
     return x if remainder == 0 else x + multiple - remainder
 
 
-def generate_attention_plot(alignments):
-    print(alignments)
-    plt.imshow(alignments, cmap='hot', interpolation='nearest')
-    plt.ylabel('Decoder Steps')
-    plt.xlabel('Encoder Steps')
-    buf = io.BytesIO()
-    plt.savefig(buf, format='png')
-    buf.seek(0)
-    plot = tf.image.decode_png(buf.getvalue(), channels=4)
-    plot = tf.expand_dims(plot, 0)
-    return plot
+def _process_utterance(wav_path):
+    wav_fn = os.path.basename(wav_path)
+
+    # Load the audio to a numpy array:
+    # wav = _trim_wav(audio.load_wav(wav_path))
+    wav = trim_wav(audio.load_wav(wav_path))
+
+    # Compute the linear-scale spectrogram from the wav:
+    spectrogram = audio.spectrogram(wav)
+    n_frames = spectrogram.shape[1]
+
+    # Compute a mel-scale spectrogram from the wav:
+    mel_spectrogram = audio.melspectrogram(wav)
+
+    # Return a tuple describing this training example:
+    return wav_fn, wav, spectrogram.T, mel_spectrogram.T, n_frames
+
+
+def trim_wav(wav, threshold_db=25):
+    '''Trims silence from the ends of the wav'''
+    splits = librosa.effects.split(wav, threshold_db, frame_length=1024, hop_length=512)
+    return wav[_find_start(splits):_find_end(splits, len(wav))]
+
+
+def _find_start(splits, min_samples=2000):
+    for split_start, split_end in splits:
+        if split_end - split_start > min_samples:
+            return max(0, split_start - min_samples)
+    return 0
+
+
+def _find_end(splits, num_samples, min_samples=2000):
+    for split_start, split_end in reversed(splits):
+        if split_end - split_start > min_samples:
+            return min(num_samples, split_end + min_samples)
+    return num_samples
