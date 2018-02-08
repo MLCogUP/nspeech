@@ -31,6 +31,11 @@ def run_eval(args):
     synth = Synthesizer()
     synth.load(args.checkpoint)
     base_path = get_output_base_path(args.checkpoint)
+    simple_eval(args, synth, base_path)
+    harvard_eval(args, synth, base_path)
+
+
+def simple_eval(args, synth, base_path):
     for i, text in enumerate(sentences):
         path = '%s-%d.wav' % (base_path, i)
         print('Synthesizing: %s' % path)
@@ -38,10 +43,7 @@ def run_eval(args):
             f.write(synth.synthesize(text, args.speaker))
 
 
-def run_harvard_eval(args):
-    synth = Synthesizer()
-    synth.load(args.checkpoint)
-    base_path = get_output_base_path(args.checkpoint)
+def harvard_eval(args, synth, base_path):
     sentences = open('harvard_sentences.txt', 'r').readlines()
     for i, text in enumerate(sentences):
         if i % 11 == 0: continue
@@ -64,8 +66,7 @@ def main():
     os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
     os.environ['CUDA_VISIBLE_DEVICES'] = str(args.gpu)  # added available gpu
     hparams.parse(args.hparams)
-    # run_eval(args)
-    run_harvard_eval(args)
+    run_eval(args)
 
 
 if __name__ == '__main__':
