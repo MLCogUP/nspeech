@@ -10,11 +10,19 @@ from util import audio
 
 
 class Synthesizer:
+    def __init__(self):
+        self.model = None
+        self.wav_output = None
+        self.session = None
+
     def load(self, checkpoint_path, model_name='tacotron'):
         print('Constructing model: %s' % model_name)
         inputs = tf.placeholder(tf.int32, [1, None], 'inputs')
         input_lengths = tf.placeholder(tf.int32, [1], 'input_lengths')
-        speaker_ids = tf.placeholder(tf.int32, [1], 'speaker_ids')
+        if hparams.num_speakers > 1:
+            speaker_ids = tf.placeholder(tf.int32, [1], 'speaker_ids')
+        else:
+            speaker_ids = None
         with tf.variable_scope('model'):
             self.model = create_model(model_name, hparams)
             self.model.initialize(inputs, input_lengths, speaker_ids)
@@ -32,9 +40,10 @@ class Synthesizer:
         seq = text_to_sequence(text, cleaner_names)
         feed_dict = {
             self.model.inputs: [np.asarray(seq, dtype=np.int32)],
-            self.model.input_lengths: np.asarray([len(seq)], dtype=np.int32),
-            self.model.speaker_ids: np.asarray([speaker_id], dtype=np.int32)
+            self.model.input_lengths: np.asarray([len(seq)], dtype=np.int32)
         }
+        if hparams.num_speakers > 1:
+            feed_dict[self.model.speaker_ids] = np.asarray([speaker_id], dtype=np.int32)
         wav = self.session.run(self.wav_output, feed_dict=feed_dict)
         wav = audio.inv_preemphasis(wav)
         wav = wav[:audio.find_endpoint(wav)]
