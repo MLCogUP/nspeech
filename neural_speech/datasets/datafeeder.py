@@ -39,7 +39,8 @@ class DataFeeder(object):
         # TODO: support more corpora by this function
         path_to_function = {
             "vctk": datasets.vctk.load_file_names,
-            "ljspeech": datasets.ljspeech.load_file_names
+            "ljspeech": datasets.ljspeech.load_file_names,
+            "librispeech": datasets.ljspeech.load_libre_2
         }
         for data_type, data_source in input_paths.items():
             self._data_items.extend(list(path_to_function[data_type](data_source)))

@@ -113,7 +113,8 @@ def main():
     parser.add_argument('--base_dir', default=os.path.expanduser('.'))
     parser.add_argument('--input', default='../data/train.txt')
     parser.add_argument('--vctk', default='')
-    parser.add_argument('--ljspeech', default='')
+    parser.add_argument('--ljspeech', default='', help="Related to preprocessed wav files")
+    parser.add_argument('--librispeech', default='', help="Related to raw flac files (big corpus)")
 
     parser.add_argument('--model', default='tacotron')
     parser.add_argument('--name', help='Name of the run. Used for logging. Defaults to model name.')
