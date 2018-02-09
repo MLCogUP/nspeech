@@ -1,18 +1,17 @@
-import os
 import random
 import threading
 import time
 import traceback
 
-import librosa
 import matplotlib
 import numpy as np
 import tensorflow as tf
 
-import datasets.ljspeech
-import datasets.vctk
+import datasets.corpus.ljspeech
+import datasets.corpus.vctk
+import datasets.corpus.vctk
+from datasets.process import _process_utterance
 from text import text_to_sequence
-from util import audio
 from util.infolog import log
 
 matplotlib.use('Agg')
@@ -38,9 +37,9 @@ class DataFeeder(object):
         self._data_items = []
         # TODO: support more corpora by this function
         path_to_function = {
-            "vctk": datasets.vctk.load_file_names,
-            "ljspeech": datasets.ljspeech.load_file_names,
-            "librispeech": datasets.ljspeech.load_libre_2
+            "vctk": datasets.corpus.vctk.load_file_names,
+            "ljspeech": datasets.corpus.ljspeech.load_file_names,
+            "librispeech": datasets.corpus.ljspeech.load_libre_2
         }
         for data_type, data_source in input_paths.items():
             self._data_items.extend(list(path_to_function[data_type](data_source)))
@@ -155,11 +154,11 @@ class DataFeeder(object):
 def _prepare_batch(batch, outputs_per_step):
     random.shuffle(batch)
     inputs = _prepare_inputs([x[0] for x in batch])
-    print(">>", inputs.shape)
+    # print(">>", inputs.shape)
     input_lengths = np.asarray([len(x[0]) for x in batch], dtype=np.int32)
-    print(">>", batch[0][1].shape)
+    # print(">>", batch[0][1].shape)
     audios = _prepare_inputs([x[1] for x in batch])
-    print(">>", audios.shape)
+    # print(">>", audios.shape)
     speaker_ids = np.asarray([x[2] for x in batch], dtype=np.int32)
     mel_targets = _prepare_targets([x[3] for x in batch], outputs_per_step)
     linear_targets = _prepare_targets([x[4] for x in batch], outputs_per_step)
@@ -187,41 +186,3 @@ def _pad_target(t, length):
 def _round_up(x, multiple):
     remainder = x % multiple
     return x if remainder == 0 else x + multiple - remainder
-
-
-def _process_utterance(wav_path):
-    wav_fn = os.path.basename(wav_path)
-
-    # Load the audio to a numpy array:
-    # wav = _trim_wav(audio.load_wav(wav_path))
-    wav = trim_wav(audio.load_wav(wav_path))
-
-    # Compute the linear-scale spectrogram from the wav:
-    spectrogram = audio.spectrogram(wav)
-    n_frames = spectrogram.shape[1]
-
-    # Compute a mel-scale spectrogram from the wav:
-    mel_spectrogram = audio.melspectrogram(wav)
-
-    # Return a tuple describing this training example:
-    return wav_fn, wav, spectrogram.T, mel_spectrogram.T, n_frames
-
-
-def trim_wav(wav, threshold_db=25):
-    '''Trims silence from the ends of the wav'''
-    splits = librosa.effects.split(wav, threshold_db, frame_length=1024, hop_length=512)
-    return wav[_find_start(splits):_find_end(splits, len(wav))]
-
-
-def _find_start(splits, min_samples=2000):
-    for split_start, split_end in splits:
-        if split_end - split_start > min_samples:
-            return max(0, split_start - min_samples)
-    return 0
-
-
-def _find_end(splits, num_samples, min_samples=2000):
-    for split_start, split_end in reversed(splits):
-        if split_end - split_start > min_samples:
-            return min(num_samples, split_end + min_samples)
-    return num_samples

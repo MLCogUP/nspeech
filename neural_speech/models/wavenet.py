@@ -8,56 +8,6 @@ import tensorflow as tf
 
 matplotlib.use('Agg')
 
-HPARAMS = tf.contrib.training.HParams(
-        # Comma-separated list of cleaners to run on text prior to training and eval. For non-English
-        # text, you may want to use "basic_cleaners" or "transliteration_cleaners" See TRAINING_DATA.md.
-        cleaners='english_cleaners',
-
-        # Audio:
-        num_mels=80,
-        num_freq=1025,  # 2048,
-        sample_rate=16000,  # 24000,
-        frame_length_ms=50,
-        frame_shift_ms=12.5,
-        preemphasis=0.97,
-        min_level_db=-100,
-        ref_level_db=20,
-
-        # custom
-        silence_threshold=0.1,
-
-        # Model:
-        filter_width=2,
-        dilations=[1, 2, 4, 8, 16, 32, 64, 128, 256, 512,
-                   # 1, 2, 4, 8, 16, 32, 64, 128, 256, 512,
-                   # 1, 2, 4, 8, 16, 32, 64, 128, 256, 512,
-                   # 1, 2, 4, 8, 16, 32, 64, 128, 256, 512,
-                   1, 2, 4, 8, 16, 32, 64, 128, 256, 512],
-        # residual_channels=32,
-        residual_channels=8,
-        # dilation_channels=32,
-        dilation_channels=8,
-        # quantization_channels=256,
-        quantization_channels=64,
-        # skip_channels=512,
-        skip_channels=128,
-        use_biases=True,
-        scalar_input=False,
-        initial_filter_width=32,
-        gc_channels=None,  # speaker embedding size
-        gc_category_cardinality=None,  # maximum speaker id
-
-        # Training:
-        batch_size=32,
-        batch_group_size=32,
-        queue_size=16,  # number of batches stored in queue
-        adam_beta1=0.9,
-        adam_beta2=0.999,
-        initial_learning_rate=0.002,
-        learning_rate_decay_halflife=100000,
-        decay_learning_rate=True
-)
-
 
 def create_variable(name, shape):
     '''Create a convolution filter variable with the specified name and shape,
@@ -148,7 +98,7 @@ class WaveNetModel(object):
                 then the global_condition tensor is regarded as a vector which
                 must have dimension global_condition_channels.
         '''
-
+        self._hparams = hparams
         self.batch_size = hparams.batch_size
         self.dilations = hparams.dilations
         self.filter_width = hparams.filter_width
@@ -160,7 +110,7 @@ class WaveNetModel(object):
         self.scalar_input = hparams.scalar_input
         self.initial_filter_width = hparams.initial_filter_width
         # self.histograms = args.histograms,
-        self.global_condition_channels = hparams.gc_channels,
+        self.global_condition_channels = hparams.gc_channels
         self.global_condition_cardinality = hparams.gc_category_cardinality
 
         self.receptive_field = WaveNetModel.calculate_receptive_field(

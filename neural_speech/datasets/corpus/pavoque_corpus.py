@@ -4,8 +4,8 @@ from functools import partial
 
 import numpy as np
 import yaml
-from util import audio
 
+from util import audio
 # from yaml import CLoader as Loader
 import io
 from unidecode import unidecode

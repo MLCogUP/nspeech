@@ -3,6 +3,7 @@ from concurrent.futures import ProcessPoolExecutor
 from functools import partial
 
 import numpy as np
+
 from hparams import hparams
 from util import audio
 

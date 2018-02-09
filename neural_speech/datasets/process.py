@@ -1,66 +1,43 @@
 import os
-import re
-from concurrent.futures import ProcessPoolExecutor
-from functools import partial
 
 import librosa
-import numpy as np
 
 from util import audio
 
-_min_samples = 2000
-_threshold_db = 25
-_speaker_re = re.compile(r'p([0-9]+)_')
 
-
-def _process_utterance(out_dir, wav_path, text):
+def _process_utterance(wav_path):
     wav_fn = os.path.basename(wav_path)
-    name = os.path.splitext(os.path.basename(wav_path))[0]
-    speaker_id = _speaker_re.match(name).group(1)
-    spectrogram_fn = 'vctk-linear-%s.npy' % name
-    spectrogram_path = os.path.join(out_dir, spectrogram_fn)
-    mel_fn = 'vctk-mel-%s.npy' % name
-    mel_path = os.path.join(out_dir, mel_fn)
 
-    if os.path.exists(spectrogram_path):
-        n_frames = np.load(spectrogram_path).shape[1]
-    else:
-        # Load the audio to a numpy array:
-        wav = _trim_wav(audio.load_wav(wav_path))
+    # Load the audio to a numpy array:
+    # wav = _trim_wav(audio.load_wav(wav_path))
+    wav = trim_wav(audio.load_wav(wav_path))
 
-        # Compute the linear-scale spectrogram from the wav:
-        spectrogram = audio.spectrogram(wav).astype(np.float32)
-        n_frames = spectrogram.shape[1]
+    # Compute the linear-scale spectrogram from the wav:
+    spectrogram = audio.spectrogram(wav)
+    n_frames = spectrogram.shape[1]
 
-        # Write the spectrograms to disk:
-        np.save(spectrogram_path, spectrogram.T, allow_pickle=False)
-
-        if not os.path.exists(mel_path):
-            # Compute a mel-scale spectrogram from the wav:
-            mel_spectrogram = audio.melspectrogram(wav).astype(np.float32)
-
-            # Write the spectrograms to disk:
-            np.save(mel_path, mel_spectrogram.T, allow_pickle=False)
+    # Compute a mel-scale spectrogram from the wav:
+    mel_spectrogram = audio.melspectrogram(wav)
 
     # Return a tuple describing this training example:
-    return wav_fn, spectrogram_fn, mel_fn, n_frames, text, speaker_id
+    return wav_fn, wav, spectrogram.T, mel_spectrogram.T, n_frames
 
 
-def _trim_wav(wav):
+def trim_wav(wav, threshold_db=25):
     '''Trims silence from the ends of the wav'''
-    splits = librosa.effects.split(wav, _threshold_db, frame_length=1024, hop_length=512)
+    splits = librosa.effects.split(wav, threshold_db, frame_length=1024, hop_length=512)
     return wav[_find_start(splits):_find_end(splits, len(wav))]
 
 
-def _find_start(splits):
+def _find_start(splits, min_samples=2000):
     for split_start, split_end in splits:
-        if split_end - split_start > _min_samples:
-            return max(0, split_start - _min_samples)
+        if split_end - split_start > min_samples:
+            return max(0, split_start - min_samples)
     return 0
 
 
-def _find_end(splits, num_samples):
+def _find_end(splits, num_samples, min_samples=2000):
     for split_start, split_end in reversed(splits):
-        if split_end - split_start > _min_samples:
-            return min(num_samples, split_end + _min_samples)
+        if split_end - split_start > min_samples:
+            return min(num_samples, split_end + min_samples)
     return num_samples
