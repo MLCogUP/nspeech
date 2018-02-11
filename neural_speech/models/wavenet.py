@@ -621,22 +621,18 @@ class WaveNetModel(object):
                 [1, self.quantization_channels])
             return tf.reshape(last, [-1])
 
-    def loss(self,
-             input_batch,
-             global_condition_batch=None,
-             l2_regularization_strength=None,
-             name='wavenet'):
+    def initialize(self, audio_inputs, global_conditions=None):
         '''Creates a WaveNet network and returns the autoencoding loss.
         The variables are all scoped to the given name.
         '''
-        with tf.name_scope(name):
+        with tf.name_scope("inference"):
             # add this for transformation
-            input_batch = tf.reshape(input_batch, [self.batch_size, -1, 1])
+            input_batch = tf.reshape(audio_inputs, [self.batch_size, -1, 1])
             # We mu-law encode and quantize the input audioform.
             encoded_input = mu_law_encode(input_batch,
                                           self.quantization_channels)
 
-            gc_embedding = self._embed_gc(global_condition_batch)
+            gc_embedding = self._embed_gc(global_conditions)
             encoded = self._one_hot(encoded_input)
             if self.scalar_input:
                 network_input = tf.reshape(
@@ -652,41 +648,42 @@ class WaveNetModel(object):
 
             raw_output = self._create_network(network_input, gc_embedding)
 
-            with tf.name_scope('loss'):
-                # Cut off the samples corresponding to the receptive field
-                # for the first predicted sample.
-                target_output = tf.slice(
-                    tf.reshape(
-                        encoded,
-                        [self.batch_size, -1, self.quantization_channels]),
-                    [0, self.receptive_field, 0],
-                    [-1, -1, -1])
-                target_output = tf.reshape(target_output,
-                                           [-1, self.quantization_channels])
-                prediction = tf.reshape(raw_output,
-                                        [-1, self.quantization_channels])
-                loss = tf.nn.softmax_cross_entropy_with_logits(
-                    logits=prediction,
-                    labels=target_output)
-                loss = tf.reduce_mean(loss)
+            self.encoded = encoded
+            self.raw_output = raw_output
 
-                tf.summary.scalar('loss', loss)
+    def add_loss(self, l2_regularization_strength=None):
+        with tf.name_scope('loss'):
+            # Cut off the samples corresponding to the receptive field
+            # for the first predicted sample.
+            target_output = tf.slice(
+                tf.reshape(
+                    self.encoded,
+                    [self.batch_size, -1, self.quantization_channels]),
+                [0, self.receptive_field, 0],
+                [-1, -1, -1])
+            target_output = tf.reshape(target_output,
+                                       [-1, self.quantization_channels])
+            prediction = tf.reshape(self.raw_output,
+                                    [-1, self.quantization_channels])
+            loss = tf.nn.softmax_cross_entropy_with_logits(
+                logits=prediction,
+                labels=target_output)
+            loss = tf.reduce_mean(loss)
 
-                if l2_regularization_strength is not None:
-                    # L2 regularization for all trainable parameters
-                    l2_loss = tf.add_n([tf.nn.l2_loss(v)
-                                        for v in tf.trainable_variables()
-                                        if not ('bias' in v.name)])
+            tf.summary.scalar('loss', loss)
 
-                    # Add the regularization term to the loss
-                    loss = (loss + l2_regularization_strength * l2_loss)
+            if l2_regularization_strength is not None:
+                # L2 regularization for all trainable parameters
+                l2_loss = tf.add_n([tf.nn.l2_loss(v)
+                                    for v in tf.trainable_variables()
+                                    if not ('bias' in v.name)])
 
-                    tf.summary.scalar('l2_loss', l2_loss)
-                    tf.summary.scalar('total_loss', loss)
+                # Add the regularization term to the loss
+                loss = (loss + l2_regularization_strength * l2_loss)
 
-        self.loss = loss
-
-        return loss
+                tf.summary.scalar('l2_loss', l2_loss)
+                tf.summary.scalar('total_loss', loss)
+            self.loss = loss
 
     def add_optimizer(self, global_step, gradient_clip=1.0):
         '''Adds optimizer. Sets "gradients" and "optimize" fields. add_loss must have been called.
