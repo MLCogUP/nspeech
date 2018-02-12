@@ -47,6 +47,9 @@ class DataFeeder(object):
         log('Loaded data refs for %d examples' % len(self._data_items))
         assert len(self._data_items) > 0, "No data found"
 
+        _, self.speaker_cardinality = get_category_cardinality(self._data_items)
+        self.speaker_cardinality += 1
+
         # Create placeholders for inputs and targets. Don't specify batch size because we want to
         # be able to feed different sized batches at eval time.
         self._placeholders = [
@@ -149,6 +152,11 @@ class DataFeeder(object):
     def _maybe_get_arpabet(self, word):
         arpabet = self._cmudict.lookup(word)
         return '{%s}' % arpabet[0] if arpabet is not None and random.random() < 0.5 else word
+
+
+def get_category_cardinality(files):
+    ids = map(lambda x: int(x[2]), files)
+    return min(ids), max(ids)
 
 
 def _prepare_batch(batch, outputs_per_step):

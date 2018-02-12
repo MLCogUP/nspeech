@@ -708,6 +708,14 @@ class WaveNetModel(object):
                 self.optimize = optimizer.apply_gradients(zip(clipped_gradients, variables),
                                                           global_step=global_step)
 
+    def add_stats(self):
+        with tf.variable_scope('stats'):
+            gradient_norms = [tf.norm(grad) for grad in self.gradients]
+            tf.summary.histogram('gradient_norm', gradient_norms)
+            tf.summary.scalar('max_gradient_norm', tf.reduce_max(gradient_norms))
+
+            self.stats = tf.summary.merge_all()
+
 
 def _learning_rate_decay(init_lr, global_step):
     # Noam scheme from tensor2tensor:
