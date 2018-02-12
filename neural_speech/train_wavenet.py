@@ -68,6 +68,7 @@ HPARAMS = tf.contrib.training.HParams(
     decay_learning_rate=True
 )
 
+tf_config = tf.ConfigProto(log_device_placement=False)
 
 def hparams_debug_string():
     values = HPARAMS.values()
@@ -90,7 +91,7 @@ def train_wavenet(log_dir, args):
     log(hparams_debug_string())
     hp = HPARAMS
 
-    with tf.Session() as sess:
+    with tf.Session(config=tf_config) as sess:
 
         # Create coordinator.
         coord = tf.train.Coordinator()
@@ -134,22 +135,12 @@ def train_wavenet(log_dir, args):
         # global_condition_batch=gc_id_batch,
         # l2_regularization_strength=args.l2_regularization_strength)
         model.add_optimizer(global_step)
-        # optimizer = optimizer_factory[args.optimizer](
-        #                 learning_rate=args.learning_rate,
-        #                 momentum=args.momentum)
-        # trainable = tf.trainable_variables()
-        # optim = optimizer.minimize(loss, var_list=trainable)
 
         # Set up logging for TensorBoard.
         # writer = tf.summary.FileWriter(logdir)
         # writer.add_graph(tf.get_default_graph())
         # run_metadata = tf.RunMetadata()
         # summaries = tf.summary.merge_all()
-
-        # Set up session
-        # sess = tf.Session(config=tf.ConfigProto(log_device_placement=False))
-        # init = tf.global_variables_initializer()
-        # sess.run(init)
 
         # Bookkeeping:
         time_window = ValueWindow(100)
@@ -161,13 +152,13 @@ def train_wavenet(log_dir, args):
             summary_writer = tf.summary.FileWriter(log_dir, sess.graph)
             sess.run(tf.global_variables_initializer())
 
-            # if args.restore_step:
-            #     # Restore from a checkpoint if the user requested it.
-            #     restore_path = '%s-%d' % (checkpoint_path, args.restore_step)
-            #     saver.restore(sess, restore_path)
-            #     log('Resuming from checkpoint: %s at commit: %s' % (restore_path, commit), slack=True)
-            # else:
-            #     log('Starting new training run at commit: %s' % commit, slack=True)
+            if args.restore_step:
+                # Restore from a checkpoint if the user requested it.
+                restore_path = '%s-%d' % (checkpoint_path, args.restore_step)
+                saver.restore(sess, restore_path)
+                log('Resuming from checkpoint: %s' % restore_path, slack=True)
+            else:
+                log('Starting new training run ', slack=True)
 
             feeder.start_threads()
 
@@ -217,7 +208,7 @@ def main():
     parser.add_argument('--ljspeech', default='', help="Related to preprocessed wav files")
     parser.add_argument('--librispeech', default='', help="Related to raw flac files (big corpus)")
 
-    parser.add_argument('--model', default='tacotron')
+    parser.add_argument('--model', default='wavenet')
     parser.add_argument('--name', help='Name of the run. Used for logging. Defaults to model name.')
     parser.add_argument('--hparams', default='',
                         help='Hyperparameter overrides as a comma-separated list of name=value pairs')

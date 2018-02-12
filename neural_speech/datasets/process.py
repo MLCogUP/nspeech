@@ -1,6 +1,7 @@
 import os
 
 import librosa
+import numpy as np
 
 from util import audio
 
@@ -27,6 +28,18 @@ def trim_wav(wav, threshold_db=25):
     '''Trims silence from the ends of the wav'''
     splits = librosa.effects.split(wav, threshold_db, frame_length=1024, hop_length=512)
     return wav[_find_start(splits):_find_end(splits, len(wav))]
+
+
+def trim_silence(audio, threshold, frame_length=2048):
+    '''Removes silence at the beginning and end of a sample.'''
+    if audio.size < frame_length:
+        frame_length = audio.size
+    energy = librosa.feature.rmse(audio, frame_length=frame_length)
+    frames = np.nonzero(energy > threshold)
+    indices = librosa.core.frames_to_samples(frames)[1]
+
+    # Note: indices can be an empty array, if the whole audio was silence.
+    return audio[indices[0]:indices[-1]] if indices.size else audio[0:0]
 
 
 def _find_start(splits, min_samples=2000):
