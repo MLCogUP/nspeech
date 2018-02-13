@@ -155,7 +155,7 @@ class DataFeeder(object):
 
 
 def get_category_cardinality(files):
-    ids = map(lambda x: int(x[2]), files)
+    ids = list(map(lambda x: int(x[2]), files))
     return min(ids), max(ids)
 
 

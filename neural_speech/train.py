@@ -66,7 +66,7 @@ def train(log_dir, args):
             else:
                 log('Starting new training run at commit: %s' % commit, slack=True)
 
-            feeder.start_threads()
+            feeder.start_threads(args.threads)
 
             while not coord.should_stop():
                 start_time = time.time()
