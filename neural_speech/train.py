@@ -23,9 +23,11 @@ def train(log_dir, args):
 
     input_paths = {}
     if args.vctk:
-        input_paths["vctk"] = os.path.join(args.base_dir, args.vctk)
+        input_paths["vctk"] = args.vctk
     if args.ljspeech:
-        input_paths["ljspeech"] = os.path.join(args.base_dir, args.ljspeech)
+        input_paths["ljspeech"] = args.ljspeech
+    if args.librispeech:
+        input_paths["librispeech"] = args.librispeech
 
     log('Checkpoint path: %s' % checkpoint_path)
     log('Loading training data from: %s' % input_paths)
@@ -66,7 +68,7 @@ def train(log_dir, args):
             else:
                 log('Starting new training run at commit: %s' % commit, slack=True)
 
-            feeder.start_threads()
+            feeder.start_threads(args.threads)
 
             while not coord.should_stop():
                 start_time = time.time()
@@ -90,8 +92,8 @@ def train(log_dir, args):
                     saver.save(sess, checkpoint_path, global_step=step)
                     log('Saving audio and alignment...')
                     # compute one example
-                    input_seq, spectrogram, alignment = sess.run([
-                        model.inputs[0], model.linear_outputs[0], model.alignments[0]])
+                    input_seq, spectrogram, melgram, alignment = sess.run([
+                        model.inputs[0], model.linear_outputs[0], model.mel_outputs[0], model.alignments[0]])
                     # TODO: replace with gpu griffinlim impl
                     waveform = audio.inv_spectrogram(spectrogram.T)
                     audio.save_wav(waveform, os.path.join(log_dir, 'step-%d-audio.wav' % step))
@@ -99,6 +101,8 @@ def train(log_dir, args):
                     plot.plot_alignment(alignment, os.path.join(log_dir, 'step-%d-align.png' % step),
                                         info='%s, %s, %s, step=%d, loss=%.5f' % (
                                             args.model, commit, time_string(), step, loss))
+                    plot.plot_specgram(spectrogram, os.path.join(log_dir, 'step-%d-lin.png' % step), "linear")
+                    plot.plot_specgram(melgram, os.path.join(log_dir, 'step-%d-mel.png' % step), "mel")
                     log('%s, %s, %s, step=%d, loss=%.5f' % (args.model, commit, time_string(), step, loss))
                     log('Input: %s' % sequence_to_text(input_seq))
 
@@ -110,7 +114,7 @@ def train(log_dir, args):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--base_dir', default=os.path.expanduser('.'))
+    parser.add_argument('--log_dir', default=os.path.expanduser('.'))
     parser.add_argument('--input', default='../data/train.txt')
     parser.add_argument('--vctk', default='')
     parser.add_argument('--ljspeech', default='', help="Related to preprocessed wav files")
@@ -134,7 +138,7 @@ def main():
     os.environ['TF_CPP_MIN_LOG_LEVEL'] = str(args.tf_log_level)
     os.environ['CUDA_VISIBLE_DEVICES'] = str(args.gpu)  # added available gpu
     run_name = args.name or args.model
-    log_dir = os.path.join(args.base_dir, '..', 'logs', run_name)
+    log_dir = os.path.join(args.log_dir, run_name)
     os.makedirs(log_dir, exist_ok=True)
     infolog.init(os.path.join(log_dir, 'train.log'), run_name, args.slack_url)
     hparams.parse(args.hparams)

@@ -1,5 +1,3 @@
-import io
-
 import numpy as np
 import tensorflow as tf
 
@@ -13,6 +11,8 @@ class Synthesizer:
     def __init__(self):
         self.model = None
         self.wav_output = None
+        self.mel_out = None
+        self.lin_out = None
         self.session = None
 
     def load(self, checkpoint_path, model_name='tacotron'):
@@ -28,6 +28,8 @@ class Synthesizer:
             self.model.initialize(inputs, input_lengths, speaker_ids)
             # TODO: add more outputs as spectrograms
             self.wav_output = audio.inv_spectrogram_tensorflow(self.model.linear_outputs[0])
+            self.mel_out = self.model.mel_outputs[0]
+            self.lin_out = self.model.linear_outputs[0]
 
         print('Loading checkpoint: %s' % checkpoint_path)
         self.session = tf.Session()
@@ -38,15 +40,15 @@ class Synthesizer:
     def synthesize(self, text, speaker_id):
         cleaner_names = [x.strip() for x in hparams.cleaners.split(',')]
         seq = text_to_sequence(text, cleaner_names)
+        print("text:", text)
+        print("input:", seq)
         feed_dict = {
             self.model.inputs: [np.asarray(seq, dtype=np.int32)],
             self.model.input_lengths: np.asarray([len(seq)], dtype=np.int32)
         }
-        if hparams.num_speakers > 1:
+        if speaker_id >= 0 and hparams.num_speakers > 1:
             feed_dict[self.model.speaker_ids] = np.asarray([speaker_id], dtype=np.int32)
-        wav = self.session.run(self.wav_output, feed_dict=feed_dict)
+        wav, mel, lin = self.session.run([self.wav_output, self.mel_out, self.lin_out], feed_dict=feed_dict)
         wav = audio.inv_preemphasis(wav)
         wav = wav[:audio.find_endpoint(wav)]
-        out = io.BytesIO()
-        audio.save_wav(wav, out)
-        return out.getvalue()
+        return wav, mel, lin

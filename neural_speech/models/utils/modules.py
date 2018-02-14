@@ -81,17 +81,18 @@ def attention_decoder(inputs, num_units, input_lengths, is_training, speaker_emb
                     memory_sequence_length=input_lengths
             )
         elif attention_type == "location_sensitive":
-            attention_mechanism = LocationSensitiveAttention(num_units, inputs)
+            attention_mechanism = LocationSensitiveAttention(num_units, inputs, memory_sequence_length=input_lengths)
         else:
             raise Exception("Unknown attention type ")
 
         # Attention
         if attention_type == "location_sensitive":
-            pre_mechanism = models.utils.rnn_wrappers.PrenetWrapper(GRUCell(num_units), [256, 128], is_training,
-                                                                    speaker_embd=speaker_embd)
+            pre_mechanism_cell = LSTMBlockCell(num_units)
         else:
-            pre_mechanism = models.utils.rnn_wrappers.PrenetWrapper(GRUCell(num_units), [256, 128], is_training,
-                                                                    speaker_embd=speaker_embd)
+            pre_mechanism_cell = GRUCell(num_units)
+
+        pre_mechanism = models.utils.rnn_wrappers.PrenetWrapper(pre_mechanism_cell, [256, 128], is_training,
+                                                                speaker_embd=speaker_embd)
         attention_cell = tf.contrib.seq2seq.AttentionWrapper(
                 pre_mechanism,  # 256
                 attention_mechanism,  # 256
