@@ -307,6 +307,8 @@ class WaveNetModel(object):
         # print(local_condition_batch)
         # TODO: Add local condition batch
         if local_condition_batch is not None:
+            local_condition_batch = tf.expand_dims(local_condition_batch, axis=1)
+            # TODO: upsampling
             weights_lc_filter = variables['lc_filtweights']
             # print(weights_lc_filter)
             conv_filter = conv_filter + tf.nn.conv1d(local_condition_batch,
