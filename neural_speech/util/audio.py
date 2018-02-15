@@ -9,9 +9,18 @@ import tensorflow as tf
 from scipy import signal
 from hparams import hparams
 
+try:
+    import soundfile as sf
+except:
+    pass
 
-def load_wav(path, offset=0.0, duration=None):
-    return librosa.core.load(path, sr=hparams.sample_rate, offset=offset, duration=duration)[0]
+
+def load_wav(path, offset=0.0, duration=None, soundfile=False):
+    if soundfile:
+        wav, sr = sf.read(path)
+        return librosa.resample(wav, sr, hparams.sample_rate)
+    else:
+        return librosa.core.load(path, sr=hparams.sample_rate, offset=offset, duration=duration)[0]
 
 
 def save_wav(wav, path):
