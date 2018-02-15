@@ -113,7 +113,6 @@ class WaveNetModel(object):
         self.global_condition_cardinality = hparams.gc_category_cardinality
         self.local_condition_channels = hparams.lc_channels
 
-
         self.receptive_field = WaveNetModel.calculate_receptive_field(
                 self.filter_width, self.dilations, self.scalar_input,
                 self.initial_filter_width)
@@ -307,8 +306,13 @@ class WaveNetModel(object):
         # print(local_condition_batch)
         # TODO: Add local condition batch
         if local_condition_batch is not None:
-            local_condition_batch = tf.expand_dims(local_condition_batch, axis=1)
-            # TODO: upsampling
+            with tf.variable_scope("upsample"):
+                local_condition_batch = tf.transpose(local_condition_batch, [0, 2, 1])
+                # TODO: upsampling
+                local_condition_batch = tf.layers.conv1d(local_condition_batch, tf.shape(conv_filter)[1],
+                                                         1, 1, padding="same")
+                local_condition_batch = tf.transpose(local_condition_batch, [0, 2, 1])
+
             weights_lc_filter = variables['lc_filtweights']
             # print(weights_lc_filter)
             conv_filter = conv_filter + tf.nn.conv1d(local_condition_batch,
@@ -430,10 +434,12 @@ class WaveNetModel(object):
         current_layer = input_batch
 
         # Pre-process the input with a regular convolution
-        if self.scalar_input:
-            initial_channels = 1
-        else:
-            initial_channels = self.quantization_channels
+        # if self.scalar_input:
+        #     initial_channels = 1
+        # else:
+        #     initial_channels = self.quantization_channels
+
+        # TODO add regular linear for initial skip in outputs as in magenta
 
         current_layer = self._create_causal_layer(current_layer)
 
