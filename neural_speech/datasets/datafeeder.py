@@ -26,7 +26,6 @@ class DataFeeder(object):
     '''Feeds batches of data into a queue on a background thread.'''
 
     def __init__(self, sess, coordinator, input_paths, hparams):
-        super(DataFeeder, self).__init__()
         self._coord = coordinator
         self._hparams = hparams
         self._cleaner_names = [x.strip() for x in hparams.cleaners.split(',')]
@@ -35,6 +34,12 @@ class DataFeeder(object):
         self._threads = []
 
         self._data_items = []
+
+        self.load_data(input_paths)
+        self.add_placeholders()
+        self.add_cmudict()
+
+    def load_data(self, input_paths):
         # TODO: support more corpora by this function
         path_to_function = {
             "vctk": datasets.corpus.vctk.load_file_names,
@@ -50,20 +55,22 @@ class DataFeeder(object):
         _, self.speaker_cardinality = get_category_cardinality(self._data_items)
         self.speaker_cardinality += 1
 
+    def add_placeholders(self):
+        hp = self._hparams
         # Create placeholders for inputs and targets. Don't specify batch size because we want to
         # be able to feed different sized batches at eval time.
         self._placeholders = [
             tf.placeholder(tf.int32, [None, None], 'inputs'),
             tf.placeholder(tf.int32, [None], 'input_lengths'),
             tf.placeholder(tf.int32, [None], 'speaker_ids'),
-            tf.placeholder(tf.float32, [None, None, hparams.num_mels], 'mel_targets'),
-            tf.placeholder(tf.float32, [None, None, hparams.num_freq], 'linear_targets'),
+            tf.placeholder(tf.float32, [None, None, hp.num_mels], 'mel_targets'),
+            tf.placeholder(tf.float32, [None, None, hp.num_freq], 'linear_targets'),
             tf.placeholder(tf.float32, [None, None], 'audio')
         ]
 
         # Create queue for buffering data:
-        queue = tf.RandomShuffleQueue(hparams.queue_size,
-                                      min_after_dequeue=int(hparams.min_dequeue_ratio * hparams.queue_size),
+        queue = tf.RandomShuffleQueue(hp.queue_size,
+                                      min_after_dequeue=int(hp.min_dequeue_ratio * hp.queue_size),
                                       dtypes=[tf.int32, tf.int32, tf.int32, tf.float32, tf.float32, tf.float32],
                                       name='input_queue')
         self._enqueue_op = queue.enqueue(self._placeholders)
@@ -75,6 +82,7 @@ class DataFeeder(object):
         self.linear_targets.set_shape(self._placeholders[4].shape)
         self.audio.set_shape(self._placeholders[5].shape)
 
+    def add_cmudict(self):
         # Load CMUDict: If enabled, this will randomly substitute some words in the training data with
         # their ARPABet equivalents, which will allow you to also pass ARPABet to the model for
         # synthesis (useful for proper nouns, etc.)
