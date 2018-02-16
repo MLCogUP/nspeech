@@ -4,6 +4,7 @@ import re
 
 from hparams import hparams, hparams_debug_string
 from synthesizer import Synthesizer
+from util import plot, audio
 
 sentences = [
     # From July 8, 2017 New York Times:
@@ -37,22 +38,26 @@ def run_eval(args):
 
 def simple_eval(args, synth, base_path):
     for i, text in enumerate(sentences):
-        path = '%s-%d.wav' % (base_path, i)
+        path = '%s-%d' % (base_path, i)
         print('Synthesizing: %s' % path)
-        with open(path, 'wb') as f:
-            f.write(synth.synthesize(text, args.speaker))
+        wav, mel, lin = synth.synthesize(text, args.speaker)
+        audio.save_wav(wav, path + ".wav")
+        plot.plot_specgram(lin, path + "-lin.png", "linear")
+        plot.plot_specgram(mel, path + "-mel.png", "mel")
 
 
 def harvard_eval(args, synth, base_path):
     sentences = open('harvard_sentences.txt', 'r').readlines()
     for i, text in enumerate(sentences):
         if i % 11 == 0: continue
-        if i / 11 > 10: break
+        if i / 11 > 3: break
         text = " ".join(text.split()[1:])
         path = '%s-%d-%d.wav' % (base_path, int(i / 11), i % 11)
         print('Synthesizing: %s' % path)
-        with open(path, 'wb') as f:
-            f.write(synth.synthesize(text, args.speaker))
+        wav, mel, lin = synth.synthesize(text, args.speaker)
+        audio.save_wav(wav, path + ".wav")
+        plot.plot_specgram(lin, path + "-lin.png", "linear")
+        plot.plot_specgram(mel, path + "-mel.png", "mel")
 
 
 def main():
@@ -62,7 +67,7 @@ def main():
     parser.add_argument('--hparams', default='',
                         help='Hyperparameter overrides as a comma-separated list of name=value pairs')
     parser.add_argument('--gpu', default=0, type=int, help='Select gpu for computation')
-    parser.add_argument('--speaker', type=int, default=374, help='Speaker ID')
+    parser.add_argument('--speaker', type=int, default=-1, help='Speaker ID')
     args = parser.parse_args()
     os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
     os.environ['CUDA_VISIBLE_DEVICES'] = str(args.gpu)  # added available gpu
