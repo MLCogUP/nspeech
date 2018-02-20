@@ -1,6 +1,8 @@
 import matplotlib
 import tensorflow as tf
 
+from datasets.WavenetDataFeeder import WavenetDataFeeder
+
 matplotlib.use('Agg')
 
 import argparse
@@ -98,9 +100,6 @@ def train_wavenet(log_dir, args):
         # Create coordinator.
         coord = tf.train.Coordinator()
 
-        with tf.variable_scope('datafeeder'):
-            feeder = DataFeeder(sess, coord, input_paths, hp)
-
         # Load raw waveform from VCTK corpus.
         # with tf.name_scope('create_inputs'):
         # Allow silence trimming to be skipped by specifying a threshold near
@@ -128,6 +127,9 @@ def train_wavenet(log_dir, args):
         global_step = tf.Variable(0, name='global_step', trainable=False)
         # Create network.
         model = models.create_model("wavenet", hp)
+
+        with tf.variable_scope('datafeeder'):
+            feeder = WavenetDataFeeder(sess, coord, input_paths, model.receptive_field, hp)
 
         if hp.l2_regularization_strength == 0:
             hp.l2_regularization_strength = None
