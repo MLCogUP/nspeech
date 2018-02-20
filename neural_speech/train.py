@@ -17,15 +17,21 @@ from util import audio, ValueWindow, plot, get_git_commit, time_string, infolog
 from util.infolog import log
 
 
-def train(log_dir, args):
-    commit = get_git_commit() if args.git else 'None'
-    checkpoint_path = os.path.join(log_dir, 'model.ckpt')
-
+def prepare_input_paths(args):
     input_paths = {}
     if args.vctk:
         input_paths["vctk"] = os.path.join(args.base_dir, args.vctk)
     if args.ljspeech:
         input_paths["ljspeech"] = os.path.join(args.base_dir, args.ljspeech)
+
+    return input_paths
+
+
+def train(log_dir, args):
+    commit = get_git_commit() if args.git else 'None'
+    checkpoint_path = os.path.join(log_dir, 'model.ckpt')
+
+    input_paths = prepare_input_paths(args)
 
     log('Checkpoint path: %s' % checkpoint_path)
     log('Loading training data from: %s' % input_paths)

@@ -327,7 +327,6 @@ class WaveNetModel(object):
                                                  stride=1,
                                                  padding="SAME",
                                                  name="lc_gate")
-        print("biases...")
         if self.use_biases:
             filter_bias = variables['filter_bias']
             gate_bias = variables['gate_bias']

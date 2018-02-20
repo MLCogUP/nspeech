@@ -123,6 +123,8 @@ class Tacotron():
         '''Adds loss to the model. Sets "loss" field. initialize must have been called.'''
         with tf.variable_scope('loss'):
             hp = self._hparams
+            print("target", self.mel_targets)
+            print("output", self.mel_outputs)
             self.mel_loss = tf.reduce_mean(tf.abs(self.mel_targets - self.mel_outputs))
             l1 = tf.abs(self.linear_targets - self.linear_outputs)
             # Prioritize loss for frequencies under 3000 Hz.

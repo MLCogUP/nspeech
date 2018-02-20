@@ -1,11 +1,11 @@
 import os
 import random
 import threading
-import time
 import traceback
 
 import numpy as np
 import tensorflow as tf
+from scipy.misc import imresize
 
 import datasets.corpus
 import datasets.process
@@ -54,24 +54,26 @@ class WavenetDataFeeder(object):
         hp = self._hparams
         # Create placeholders for inputs and targets. Don't specify batch size because we want to
         # be able to feed different sized batches at eval time.
+        audio_length = self.receptive_field + self.sample_size
         self._placeholders = [
-            tf.placeholder(tf.float32, [None], 'audio'),
+            tf.placeholder(tf.float32, [audio_length], 'audio'),
             tf.placeholder(tf.int32, [1], 'speaker_ids'),
-            tf.placeholder(tf.float32, [None, hp.num_freq], 'linear_targets'),
-            tf.placeholder(tf.float32, [None, hp.num_mels], 'mel_targets'),
+            tf.placeholder(tf.float32, [audio_length, hp.num_freq], 'linear_targets'),
+            tf.placeholder(tf.float32, [audio_length, hp.num_mels], 'mel_targets'),
         ]
 
         # Create queue for buffering data:
-        queue = tf.RandomShuffleQueue(hp.queue_size,
-                                      min_after_dequeue=int(hp.min_dequeue_ratio * hp.queue_size),
-                                      dtypes=[tf.float32, tf.int32, tf.float32, tf.float32],
-                                      name='input_queue')
+        # queue = tf.RandomShuffleQueue(hp.queue_size,
+        #                               min_after_dequeue=int(hp.min_dequeue_ratio * hp.queue_size),
+        #                               dtypes=[tf.float32, tf.int32, tf.float32, tf.float32],
+        #                               name='input_queue')
+        queue = tf.FIFOQueue(hp.queue_size,
+                             dtypes=[tf.float32, tf.int32, tf.float32, tf.float32],
+                             shapes=[[audio_length], [1], [audio_length, hp.num_freq], [audio_length, hp.num_mels]],
+                             name='input_queue')
+
         self._enqueue_op = queue.enqueue(self._placeholders)
         self.audio, self.speaker_ids, self.linear_targets, self.mel_targets = queue.dequeue_many(hp.batch_size)
-        self.audio.set_shape(self._placeholders[0].shape)
-        self.speaker_ids.set_shape(self._placeholders[1].shape)
-        self.linear_targets.set_shape(self._placeholders[2].shape)
-        self.mel_targets.set_shape(self._placeholders[3].shape)
 
     def start_threads(self, n_threads=1):
         for _ in range(n_threads):
@@ -95,37 +97,37 @@ class WavenetDataFeeder(object):
 
     def _enqueue_next_group(self):
         """
-        Loads a bunch of samples into memory, sorts them by output length and
-        creates batches from it.
-        This is done for efficiency - reducing padding.
+        Loads one wav example at a time and creates several training samples from it based on the receptive field
+        and the number of predictions per sample.
         """
-        # start = time.time()
-
         # Read a group of examples:
         wav_fn, wav, text, speaker_id = self._get_next_example()
 
         # trim wav
         if self.silence_threshold is not None:
             # Remove silence
-            wav = datasets.process.trim_silence(wav[:, 0], self.silence_threshold)
-            wav = wav.reshape(-1, 1)
+            wav = datasets.process.trim_silence(wav, self.silence_threshold)
             if wav.size == 0:
                 print("Warning: {} was ignored as it contains only "
                       "silence. Consider decreasing trim_silence "
                       "threshold, or adjust volume of the audio.".format(wav_fn))
 
-        wav = np.pad(wav, [[self.receptive_field, 0], [0, 0]], 'constant')
+        wav = np.pad(wav, [self.receptive_field, 0], 'constant')
 
         # Cut samples into pieces of size receptive_field +
         # sample_size with receptive_field overlap
-        while len(wav) > self.receptive_field:
-            piece = wav[:(self.receptive_field + self.sample_size), :]
+        while len(wav) > self.receptive_field + self.sample_size:
+            piece = wav[:(self.receptive_field + self.sample_size)]
             self.enqueue_audio(piece, speaker_id)
-            wav = wav[self.sample_size:, :]
+            wav = wav[self.sample_size:]
 
     def enqueue_audio(self, wav, speaker_id):
-        linear = audio.spectrogram(wav)
-        mel = audio.melspectrogram(wav)
+        linear = audio.spectrogram(wav).T
+        mel = audio.melspectrogram(wav).T
+
+        linear = imresize(linear, size=(len(wav), linear.shape[1]))
+        mel = imresize(mel, size=(len(wav), mel.shape[1]))
+
         feed_dict = dict(zip(self._placeholders, (wav, speaker_id, linear, mel)))
         self._session.run(self._enqueue_op, feed_dict=feed_dict)
 
@@ -143,4 +145,4 @@ class WavenetDataFeeder(object):
 
         # encode text sequence information
         text = np.asarray(text_to_sequence(text, self._cleaner_names), dtype=np.int32)
-        return wav_fn, wav, text, speaker_id
+        return wav_fn, wav, text, np.asarray([speaker_id], dtype=np.int32)

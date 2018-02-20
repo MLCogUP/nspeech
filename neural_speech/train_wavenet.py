@@ -11,7 +11,6 @@ import os
 import time
 import traceback
 
-from datasets.datafeeder import DataFeeder
 import models
 from util import ValueWindow, infolog
 from util.infolog import log
@@ -56,12 +55,12 @@ HPARAMS = tf.contrib.training.HParams(
         initial_filter_width=32,
         gc_channels=16,  # speaker embedding size
         gc_category_cardinality=276,  # maximum speaker id
-        lc_channels=80,
+        lc_channels=0,
         l2_regularization_strength=0,
 
         # Training:
         batch_size=1,
-        batch_group_size=16,
+        batch_group_size=1,
         queue_size=32,  # number of batches stored in queue
         min_dequeue_ratio=0,
         adam_beta1=0.9,
@@ -73,6 +72,8 @@ HPARAMS = tf.contrib.training.HParams(
 
 tf_config = tf.ConfigProto(log_device_placement=False)
 
+from train import prepare_input_paths
+
 
 def hparams_debug_string():
     values = HPARAMS.values()
@@ -83,11 +84,7 @@ def hparams_debug_string():
 def train_wavenet(log_dir, args):
     checkpoint_path = os.path.join(log_dir, 'model.ckpt')
 
-    input_paths = {}
-    if args.vctk:
-        input_paths["vctk"] = os.path.join(args.base_dir, args.vctk)
-    if args.ljspeech:
-        input_paths["ljspeech"] = os.path.join(args.base_dir, args.ljspeech)
+    input_paths = prepare_input_paths(args)
 
     log('Checkpoint path: %s' % checkpoint_path)
     log('Loading training data from: %s' % input_paths)
@@ -133,7 +130,8 @@ def train_wavenet(log_dir, args):
 
         if hp.l2_regularization_strength == 0:
             hp.l2_regularization_strength = None
-        model.initialize(feeder.audio, feeder.speaker_ids, feeder.mel_targets)
+        # TODO
+        model.initialize(feeder.audio, feeder.speaker_ids)#, feeder.mel_targets)
         model.add_loss()
         # ,
         # global_condition_batch=gc_id_batch,

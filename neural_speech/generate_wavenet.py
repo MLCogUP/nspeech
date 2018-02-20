@@ -22,96 +22,6 @@ SAVE_EVERY = None
 SILENCE_THRESHOLD = 0.1
 
 
-def get_arguments():
-    def _str_to_bool(s):
-        """Convert string to bool (in argparse context)."""
-        if s.lower() not in ['true', 'false']:
-            raise ValueError('Argument needs to be a '
-                             'boolean, got {}'.format(s))
-        return {'true': True, 'false': False}[s.lower()]
-
-    def _ensure_positive_float(f):
-        """Ensure argument is a positive float."""
-        if float(f) < 0:
-            raise argparse.ArgumentTypeError(
-                    'Argument must be greater than zero')
-        return float(f)
-
-    parser = argparse.ArgumentParser(description='WaveNet generation script')
-    parser.add_argument(
-            'checkpoint', type=str, help='Which model checkpoint to generate from')
-    parser.add_argument(
-            '--samples',
-            type=int,
-            default=SAMPLES,
-            help='How many waveform samples to generate')
-    parser.add_argument(
-            '--temperature',
-            type=_ensure_positive_float,
-            default=TEMPERATURE,
-            help='Sampling temperature')
-    parser.add_argument(
-            '--logdir',
-            type=str,
-            default=LOGDIR,
-            help='Directory in which to store the logging '
-                 'information for TensorBoard.')
-    parser.add_argument(
-            '--wavenet_params',
-            type=str,
-            default=WAVENET_PARAMS,
-            help='JSON file with the network parameters')
-    parser.add_argument(
-            '--wav_out_path',
-            type=str,
-            default=None,
-            help='Path to output wav file')
-    parser.add_argument(
-            '--save_every',
-            type=int,
-            default=SAVE_EVERY,
-            help='How many samples before saving in-progress wav')
-    parser.add_argument(
-            '--fast_generation',
-            type=_str_to_bool,
-            default=True,
-            help='Use fast generation')
-    parser.add_argument(
-            '--wav_seed',
-            type=str,
-            default=None,
-            help='The wav file to start generation from')
-    parser.add_argument(
-            '--gc_channels',
-            type=int,
-            default=None,
-            help='Number of global condition embedding channels. Omit if no '
-                 'global conditioning.')
-    parser.add_argument(
-            '--gc_cardinality',
-            type=int,
-            default=None,
-            help='Number of categories upon which we globally condition.')
-    parser.add_argument(
-            '--gc_id',
-            type=int,
-            default=None,
-            help='ID of category to generate, if globally conditioned.')
-    arguments = parser.parse_args()
-    if arguments.gc_channels is not None:
-        if arguments.gc_cardinality is None:
-            raise ValueError("Globally conditioning but gc_cardinality not "
-                             "specified. Use --gc_cardinality=377 for full "
-                             "VCTK corpus.")
-
-        if arguments.gc_id is None:
-            raise ValueError("Globally conditioning, but global condition was "
-                             "not specified. Use --gc_id to specify global "
-                             "condition.")
-
-    return arguments
-
-
 def write_wav(waveform, sample_rate, filename):
     y = np.array(waveform)
     librosa.output.write_wav(filename, y, sample_rate)
@@ -134,8 +44,7 @@ def create_seed(filename,
     return quantized[:cut_index]
 
 
-def main():
-    args = get_arguments()
+def main(args):
     started_datestring = "{0:%Y-%m-%dT%H-%M-%S}".format(datetime.now())
     logdir = os.path.join(args.logdir, 'generate', started_datestring)
     with open(args.wavenet_params, 'r') as config_file:
@@ -223,12 +132,12 @@ def main():
         # scaling.
         if args.temperature == 1.0:
             np.testing.assert_allclose(
-                    prediction, scaled_prediction, atol=1e-5,
-                    err_msg='Prediction scaling at temperature=1.0 '
-                            'is not working as intended.')
+                prediction, scaled_prediction, atol=1e-5,
+                err_msg='Prediction scaling at temperature=1.0 '
+                        'is not working as intended.')
 
         sample = np.random.choice(
-                np.arange(quantization_channels), p=scaled_prediction)
+            np.arange(quantization_channels), p=scaled_prediction)
         waveform.append(sample)
 
         # Show progress only once per second.
@@ -241,7 +150,7 @@ def main():
 
         # If we have partial writing, save the result so far.
         if (args.wav_out_path and args.save_every and
-                        (step + 1) % args.save_every == 0):
+                (step + 1) % args.save_every == 0):
             out = sess.run(decode, feed_dict={samples: waveform})
             write_wav(out, wavenet_params['sample_rate'], args.wav_out_path)
 
@@ -266,4 +175,56 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    def _str_to_bool(s):
+        """Convert string to bool (in argparse context)."""
+        if s.lower() not in ['true', 'false']:
+            raise ValueError('Argument needs to be a '
+                             'boolean, got {}'.format(s))
+        return {'true': True, 'false': False}[s.lower()]
+
+
+    def _ensure_positive_float(f):
+        """Ensure argument is a positive float."""
+        if float(f) < 0:
+            raise argparse.ArgumentTypeError(
+                'Argument must be greater than zero')
+        return float(f)
+
+
+    parser = argparse.ArgumentParser(description='WaveNet generation script')
+    parser.add_argument('checkpoint', type=str,
+                        help='Which model checkpoint to generate from')
+    parser.add_argument('--samples', type=int, default=SAMPLES,
+                        help='How many waveform samples to generate')
+    parser.add_argument('--temperature', type=_ensure_positive_float, default=TEMPERATURE,
+                        help='Sampling temperature')
+    parser.add_argument('--logdir', type=str, default=LOGDIR,
+                        help='Directory in which to store the logging information for TensorBoard.')
+    parser.add_argument('--wavenet_params', type=str, default=WAVENET_PARAMS,
+                        help='JSON file with the network parameters')
+    parser.add_argument('--wav_out_path', type=str, default=None,
+                        help='Path to output wav file')
+    parser.add_argument('--save_every', type=int, default=SAVE_EVERY,
+                        help='How many samples before saving in-progress wav')
+    parser.add_argument('--fast_generation', type=_str_to_bool, default=True,
+                        help='Use fast generation')
+    parser.add_argument('--wav_seed', type=str, default=None,
+                        help='The wav file to start generation from')
+    parser.add_argument('--gc_channels', type=int, default=None,
+                        help='Number of global condition embedding channels. Omit if no global conditioning.')
+    parser.add_argument('--gc_cardinality', type=int, default=None,
+                        help='Number of categories upon which we globally condition.')
+    parser.add_argument('--gc_id', type=int, default=None,
+                        help='ID of category to generate, if globally conditioned.')
+    args = parser.parse_args()
+    if args.gc_channels is not None:
+        if args.gc_cardinality is None:
+            raise ValueError("Globally conditioning but gc_cardinality not "
+                             "specified. Use --gc_cardinality=377 for full "
+                             "VCTK corpus.")
+
+        if args.gc_id is None:
+            raise ValueError("Globally conditioning, but global condition was "
+                             "not specified. Use --gc_id to specify global "
+                             "condition.")
+    main(args)
