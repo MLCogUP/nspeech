@@ -4,7 +4,6 @@ from concurrent.futures import ProcessPoolExecutor
 from functools import partial
 
 import librosa
-import numpy as np
 
 from util import audio
 
@@ -13,37 +12,32 @@ _threshold_db = 25
 _speaker_re = re.compile(r'p([0-9]+)_')
 
 
-def _process_utterance(out_dir, wav_path, text):
+def build_from_path(filenames, out_dir, num_workers=1, tqdm=lambda x: x, limit=0):
+    executor = ProcessPoolExecutor(max_workers=num_workers)
+    futures = []
+    for wav_path, text, speaker_id, dataset_id in filenames:
+        if limit and len(futures) > limit:
+            break
+        futures.append(executor.submit(partial(process_utterance, out_dir, wav_path, text, speaker_id)))
+    return [future.result() for future in tqdm(futures)]
+
+
+def process_utterance(wav_path):
     wav_fn = os.path.basename(wav_path)
-    name = os.path.splitext(os.path.basename(wav_path))[0]
-    speaker_id = _speaker_re.match(name).group(1)
-    spectrogram_fn = 'vctk-linear-%s.npy' % name
-    spectrogram_path = os.path.join(out_dir, spectrogram_fn)
-    mel_fn = 'vctk-mel-%s.npy' % name
-    mel_path = os.path.join(out_dir, mel_fn)
 
-    if os.path.exists(spectrogram_path):
-        n_frames = np.load(spectrogram_path).shape[1]
-    else:
-        # Load the audio to a numpy array:
-        wav = _trim_wav(audio.load_wav(wav_path))
+    # Load the audio to a numpy array:
+    # wav = _trim_wav(audio.load_wav(wav_path))
+    wav = _trim_wav(audio.load_wav(wav_path))
 
-        # Compute the linear-scale spectrogram from the wav:
-        spectrogram = audio.spectrogram(wav).astype(np.float32)
-        n_frames = spectrogram.shape[1]
+    # Compute the linear-scale spectrogram from the wav:
+    spectrogram = audio.spectrogram(wav)
+    n_frames = spectrogram.shape[1]
 
-        # Write the spectrograms to disk:
-        np.save(spectrogram_path, spectrogram.T, allow_pickle=False)
-
-        if not os.path.exists(mel_path):
-            # Compute a mel-scale spectrogram from the wav:
-            mel_spectrogram = audio.melspectrogram(wav).astype(np.float32)
-
-            # Write the spectrograms to disk:
-            np.save(mel_path, mel_spectrogram.T, allow_pickle=False)
+    # Compute a mel-scale spectrogram from the wav:
+    mel_spectrogram = audio.melspectrogram(wav)
 
     # Return a tuple describing this training example:
-    return wav_fn, spectrogram_fn, mel_fn, n_frames, text, speaker_id
+    return wav_fn, wav, spectrogram.T, mel_spectrogram.T, n_frames
 
 
 def _trim_wav(wav):

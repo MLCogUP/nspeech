@@ -1,18 +1,16 @@
-import os
 import random
 import threading
 import time
 import traceback
 
-import librosa
 import matplotlib
 import numpy as np
 import tensorflow as tf
 
 import datasets.ljspeech
 import datasets.vctk
+from datasets.process import process_utterance
 from text import text_to_sequence
-from util import audio
 from util.infolog import log
 
 matplotlib.use('Agg')
@@ -136,10 +134,10 @@ class DataFeeder(object):
         if self._offset >= len(self._data_items):
             self._offset = 0
             random.shuffle(self._data_items)
-        wav_path, text, speaker_id = self._data_items[self._offset]
+        wav_path, text, speaker_id, dataset_id = self._data_items[self._offset]
         self._offset += 1
 
-        wav_fn, wav, linear_target, mel_target, n_frames = _process_utterance(wav_path)
+        wav_fn, wav, linear_target, mel_target, n_frames = process_utterance(wav_path)
 
         if self._cmudict and random.random() < _p_cmudict:
             text = ' '.join([self._maybe_get_arpabet(word) for word in text.split(' ')])
@@ -189,39 +187,5 @@ def _round_up(x, multiple):
     return x if remainder == 0 else x + multiple - remainder
 
 
-def _process_utterance(wav_path):
-    wav_fn = os.path.basename(wav_path)
-
-    # Load the audio to a numpy array:
-    # wav = _trim_wav(audio.load_wav(wav_path))
-    wav = trim_wav(audio.load_wav(wav_path))
-
-    # Compute the linear-scale spectrogram from the wav:
-    spectrogram = audio.spectrogram(wav)
-    n_frames = spectrogram.shape[1]
-
-    # Compute a mel-scale spectrogram from the wav:
-    mel_spectrogram = audio.melspectrogram(wav)
-
-    # Return a tuple describing this training example:
-    return wav_fn, wav, spectrogram.T, mel_spectrogram.T, n_frames
 
 
-def trim_wav(wav, threshold_db=25):
-    '''Trims silence from the ends of the wav'''
-    splits = librosa.effects.split(wav, threshold_db, frame_length=1024, hop_length=512)
-    return wav[_find_start(splits):_find_end(splits, len(wav))]
-
-
-def _find_start(splits, min_samples=2000):
-    for split_start, split_end in splits:
-        if split_end - split_start > min_samples:
-            return max(0, split_start - min_samples)
-    return 0
-
-
-def _find_end(splits, num_samples, min_samples=2000):
-    for split_start, split_end in reversed(splits):
-        if split_end - split_start > min_samples:
-            return min(num_samples, split_end + min_samples)
-    return num_samples
