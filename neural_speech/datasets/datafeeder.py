@@ -54,12 +54,12 @@ class DataFeeder(object):
             tf.placeholder(tf.int32, [None], 'speaker_ids'),
             tf.placeholder(tf.float32, [None, None, hparams.num_mels], 'mel_targets'),
             tf.placeholder(tf.float32, [None, None, hparams.num_freq], 'linear_targets'),
-            tf.placeholder(tf.float32, [None, 1], 'audio')
+            tf.placeholder(tf.float32, [None, None], 'audio')
         ]
 
         # Create queue for buffering data:
         queue = tf.RandomShuffleQueue(hparams.queue_size,
-                                      min_after_dequeue=int(0.8 * hparams.queue_size),
+                                      min_after_dequeue=int(hparams.min_dequeue_ratio * hparams.queue_size),
                                       dtypes=[tf.int32, tf.int32, tf.int32, tf.float32, tf.float32, tf.float32],
                                       name='input_queue')
         self._enqueue_op = queue.enqueue(self._placeholders)
@@ -153,11 +153,8 @@ class DataFeeder(object):
 def _prepare_batch(batch, outputs_per_step):
     random.shuffle(batch)
     inputs = _prepare_inputs([x[0] for x in batch])
-    print(">>", inputs.shape)
     input_lengths = np.asarray([len(x[0]) for x in batch], dtype=np.int32)
-    print(">>", batch[0][1].shape)
-    audios = np.asarray([x[1] for x in batch], dtype=np.float32)
-    print(">>", audios.shape)
+    audios = _prepare_inputs([x[1] for x in batch])
     speaker_ids = np.asarray([x[2] for x in batch], dtype=np.int32)
     mel_targets = _prepare_targets([x[3] for x in batch], outputs_per_step)
     linear_targets = _prepare_targets([x[4] for x in batch], outputs_per_step)

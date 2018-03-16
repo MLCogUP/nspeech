@@ -20,6 +20,7 @@ def plot_alignment(alignment, path, info=None):
     plt.ylabel('Encoder timestep')
     plt.tight_layout()
     plt.savefig(path, format='png')
+    plt.close()
 
 
 def plot_specgram(spec, path, spec_type="linear"):
@@ -35,3 +36,4 @@ def plot_specgram(spec, path, spec_type="linear"):
         pass
     plt.tight_layout()
     plt.savefig(path, format='png')
+    plt.close()

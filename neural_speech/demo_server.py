@@ -84,6 +84,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--checkpoint', required=True, help='Full path to model checkpoint')
     parser.add_argument('--port', type=int, default=9000)
+    parser.add_argument('--model', default='tacotron')
     parser.add_argument('--hparams', default='',
                         help='Hyperparameter overrides as a comma-separated list of name=value pairs')
     parser.add_argument('--gpu', default=0, type=int, help='Select gpu for computation')
@@ -92,8 +93,6 @@ if __name__ == '__main__':
     os.environ['CUDA_VISIBLE_DEVICES'] = str(args.gpu)  # added available gpu
     hparams.parse(args.hparams)
     print(hparams_debug_string())
-    synthesizer.load(args.checkpoint)
+    synthesizer.load(args.checkpoint, args.model)
     print('Serving on port %d' % args.port)
     simple_server.make_server('0.0.0.0', args.port, api).serve_forever()
-else:
-    synthesizer.load(os.environ['CHECKPOINT'])

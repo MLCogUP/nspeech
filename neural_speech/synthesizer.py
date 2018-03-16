@@ -15,7 +15,7 @@ class Synthesizer:
         self.lin_out = None
         self.session = None
 
-    def load(self, checkpoint_path, model_name='tacotron'):
+    def load(self, checkpoint_path, model_name):
         print('Constructing model: %s' % model_name)
         inputs = tf.placeholder(tf.int32, [1, None], 'inputs')
         input_lengths = tf.placeholder(tf.int32, [1], 'input_lengths')

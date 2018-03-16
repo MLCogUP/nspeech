@@ -25,7 +25,7 @@ def load_wav(path, offset=0.0, duration=None, soundfile=False):
 
 def save_wav(wav, path):
     wav *= 32767 / max(0.01, np.max(np.abs(wav)))
-    librosa.output.write_wav(path, wav.astype(np.int16), hparams.sample_rate)
+    librosa.output.write_wav(path, wav, hparams.sample_rate)
 
 
 def preemphasis(x):
