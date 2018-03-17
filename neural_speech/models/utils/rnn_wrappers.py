@@ -1,7 +1,7 @@
 import tensorflow as tf
 from tensorflow.contrib.rnn import RNNCell
 
-import models.utils.modules
+import neural_speech.models.utils.modules
 
 
 class PrenetWrapper(RNNCell):
@@ -23,8 +23,8 @@ class PrenetWrapper(RNNCell):
         return self._cell.output_size
 
     def call(self, inputs, state):
-        prenet_out = models.utils.modules.prenet(inputs, drop_rate=0.5, is_training=self._is_training,
-                                                 layer_sizes=self.layer_sizes, scope="decoder_prenet", reuse=None)
+        prenet_out = neural_speech.models.utils.modules.prenet(inputs, drop_rate=0.5, is_training=self._is_training,
+                                                               layer_sizes=self.layer_sizes, scope="decoder_prenet", reuse=None)
         if self._speaker_embd is not None:
             s = tf.layers.dense(self._speaker_embd, prenet_out.shape[-1], activation=tf.nn.softsign)
             prenet_out = tf.concat([prenet_out, s], axis=-1, name="speaker_concat")

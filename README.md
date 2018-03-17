@@ -82,7 +82,7 @@ An implementation of Tacotron speech synthesis in TensorFlow based on https://gi
    python3 train.py
    ```
 
-   Tunable hyperparameters are found in [hparams.py](hparams.py). You can adjust these at the command
+   Tunable hyperparameters are found in [hparams.py](neural_speech/hparams.py). You can adjust these at the command
    line using the `--hparams` flag, for example `--hparams="batch_size=16,outputs_per_step=2"`.
    Hyperparameters should generally be set to the same values at both training and eval time.
 

@@ -3,8 +3,9 @@ from concurrent.futures import ProcessPoolExecutor
 from functools import partial
 
 import numpy as np
-from hparams import hparams
-from util import audio
+
+from neural_speech.hparams import hparams
+from neural_speech.util import audio
 
 _max_out_length = 700
 _end_buffer = 0.05

@@ -1,10 +1,10 @@
 import numpy as np
 import tensorflow as tf
 
-from hparams import hparams
-from models import create_model
-from text import text_to_sequence
-from util import audio
+from neural_speech.hparams import hparams
+from neural_speech.models import create_model
+from neural_speech.text import text_to_sequence
+from neural_speech.util import audio
 
 
 class Synthesizer:

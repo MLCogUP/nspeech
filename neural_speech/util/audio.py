@@ -7,7 +7,7 @@ import librosa.filters
 import numpy as np
 import tensorflow as tf
 from scipy import signal
-from hparams import hparams
+from neural_speech.hparams import hparams
 
 try:
     import soundfile as sf

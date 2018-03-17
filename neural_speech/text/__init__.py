@@ -1,7 +1,7 @@
 import re
 
-from text import cleaners
-from text.symbols import symbols
+from neural_speech.text import cleaners
+from neural_speech.text.symbols import symbols
 
 # Mappings from symbol to numeric ID and vice versa:
 _symbol_to_id = {s: i for i, s in enumerate(symbols)}

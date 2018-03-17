@@ -3,8 +3,8 @@ import os
 
 import falcon
 
-from hparams import hparams, hparams_debug_string
-from synthesizer import Synthesizer
+from neural_speech.hparams import hparams, hparams_debug_string
+from neural_speech.synthesizer import Synthesizer
 
 html_body = '''<html><title>Landing Page</title>
 <style>

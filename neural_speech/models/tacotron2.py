@@ -2,10 +2,10 @@ import tensorflow as tf
 from tensorflow.contrib.rnn import MultiRNNCell, OutputProjectionWrapper, LSTMBlockCell
 from tensorflow.contrib.seq2seq import BasicDecoder
 
-from models.utils.helpers import TacoTestHelper, TacoTrainingHelper
-from models.utils.modules import embedding, attention_decoder, conv_and_lstm, postnet
-from text.symbols import symbols
-from util.infolog import log
+from neural_speech.models.utils.helpers import TacoTestHelper, TacoTrainingHelper
+from neural_speech.models.utils.modules import embedding, attention_decoder, conv_and_lstm, postnet
+from neural_speech.text.symbols import symbols
+from neural_speech.util.infolog import log
 
 
 class Tacotron2():

@@ -2,9 +2,9 @@ import argparse
 import os
 import re
 
-from hparams import hparams, hparams_debug_string
-from synthesizer import Synthesizer
-from util import plot, audio
+from neural_speech.hparams import hparams, hparams_debug_string
+from neural_speech.synthesizer import Synthesizer
+from neural_speech.util import plot, audio
 
 sentences = [
     # From July 8, 2017 New York Times:

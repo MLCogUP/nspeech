@@ -1,14 +1,14 @@
+# from yaml import CLoader as Loader
+import io
 import os
 from concurrent.futures import ProcessPoolExecutor
 from functools import partial
 
 import numpy as np
 import yaml
-from util import audio
-
-# from yaml import CLoader as Loader
-import io
 from unidecode import unidecode
+
+from neural_speech.util import audio
 
 
 def build_from_path(in_dir, out_dir, num_workers=1, tqdm=lambda x: x):

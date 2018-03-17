@@ -1,5 +1,5 @@
-from models.tacotron import Tacotron
-from models.tacotron2 import Tacotron2
+from neural_speech.models.tacotron import Tacotron
+from neural_speech.models.tacotron2 import Tacotron2
 
 
 def create_model(name, hparams):

@@ -9,12 +9,12 @@ import time
 import tensorflow as tf
 import traceback
 
-from datasets.datafeeder import DataFeeder
-from hparams import hparams, hparams_debug_string
-from models import create_model
-from text import sequence_to_text
-from util import audio, ValueWindow, plot, get_git_commit, time_string, infolog
-from util.infolog import log
+from neural_speech.datasets.datafeeder import DataFeeder
+from neural_speech.hparams import hparams, hparams_debug_string
+from neural_speech.models import create_model
+from neural_speech.text import sequence_to_text
+from neural_speech.util import audio, ValueWindow, plot, get_git_commit, time_string, infolog
+from neural_speech.util.infolog import log
 
 
 def train(log_dir, args):
@@ -114,7 +114,7 @@ def train(log_dir, args):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--log_dir', default=os.path.expanduser('.'))
+    parser.add_argument('--log_dir', default=os.path.expanduser('logs'))
     parser.add_argument('--input', default='../data/train.txt')
     parser.add_argument('--vctk', default='')
     parser.add_argument('--ljspeech', default='', help="Related to preprocessed wav files")

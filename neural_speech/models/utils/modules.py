@@ -1,8 +1,8 @@
 import tensorflow as tf
 from tensorflow.contrib.rnn import GRUCell, LSTMBlockCell
 
-import models.utils.rnn_wrappers
-from models.utils.attention import LocationSensitiveAttention
+import neural_speech.models.utils.rnn_wrappers
+from neural_speech.models.utils.attention import LocationSensitiveAttention
 
 
 def embedding(inputs, vocab_size, num_units, scope="embedding", reuse=None):
@@ -38,12 +38,12 @@ def conv_and_lstm(inputs, input_lengths, conv_layers, conv_width, conv_channels,
 
         # 2-layer bidirectional LSTM:
         outputs, states = tf.nn.bidirectional_dynamic_rnn(
-                LSTMBlockCell(lstm_units),
-                LSTMBlockCell(lstm_units),
-                x,
-                sequence_length=input_lengths,
-                dtype=tf.float32,
-                scope='encoder_lstm')
+            LSTMBlockCell(lstm_units),
+            LSTMBlockCell(lstm_units),
+            x,
+            sequence_length=input_lengths,
+            dtype=tf.float32,
+            scope='encoder_lstm')
 
         # Concatentate forward and backwards:
         return tf.concat(outputs, axis=2)
@@ -63,22 +63,22 @@ def attention_decoder(inputs, num_units, input_lengths, is_training, speaker_emb
     with tf.variable_scope(scope, reuse=reuse):
         if attention_type == 'bah_mon':
             attention_mechanism = tf.contrib.seq2seq.BahdanauMonotonicAttention(
-                    num_units, inputs)
+                num_units, inputs)
         elif attention_type == 'bah_norm':
             attention_mechanism = tf.contrib.seq2seq.BahdanauAttention(
-                    num_units, inputs, normalize=True)
+                num_units, inputs, normalize=True)
         elif attention_type == 'luong_scaled':
             attention_mechanism = tf.contrib.seq2seq.LuongAttention(
-                    num_units, inputs, scale=True)
+                num_units, inputs, scale=True)
         elif attention_type == 'luong':
             attention_mechanism = tf.contrib.seq2seq.LuongAttention(
-                    num_units, inputs)
+                num_units, inputs)
         elif attention_type == 'bah':
             # Bahdanau et al. attention mechanism
             attention_mechanism = tf.contrib.seq2seq.BahdanauAttention(
-                    num_units,  # attention units
-                    inputs,
-                    memory_sequence_length=input_lengths
+                num_units,  # attention units
+                inputs,
+                memory_sequence_length=input_lengths
             )
         elif attention_type == "location_sensitive":
             attention_mechanism = LocationSensitiveAttention(num_units, inputs, memory_sequence_length=input_lengths)
@@ -91,15 +91,17 @@ def attention_decoder(inputs, num_units, input_lengths, is_training, speaker_emb
         else:
             pre_mechanism_cell = GRUCell(num_units)
 
-        pre_mechanism = models.utils.rnn_wrappers.PrenetWrapper(pre_mechanism_cell, [256, 128], is_training,
-                                                                speaker_embd=speaker_embd)
+        pre_mechanism = neural_speech.models.utils.rnn_wrappers.PrenetWrapper(pre_mechanism_cell, [256, 128],
+                                                                              is_training,
+                                                                              speaker_embd=speaker_embd)
         attention_cell = tf.contrib.seq2seq.AttentionWrapper(
-                pre_mechanism,  # 256
-                attention_mechanism,  # 256
-                alignment_history=True,
-                output_attention=False)  # [N, T_in, 256]
+            pre_mechanism,  # 256
+            attention_mechanism,  # 256
+            alignment_history=True,
+            output_attention=False)  # [N, T_in, 256]
         #  Concatenate attention context vector and RNN cell output into a 512D vector.
-        concat_cell = models.utils.rnn_wrappers.ConcatOutputAndAttentionWrapper(attention_cell)  # [N, T_in, 512]
+        concat_cell = neural_speech.models.utils.rnn_wrappers.ConcatOutputAndAttentionWrapper(
+            attention_cell)  # [N, T_in, 512]
         return concat_cell
 
 
@@ -109,8 +111,8 @@ def cbhg(inputs, input_lengths, speaker_embd=None, is_training=True,
         with tf.variable_scope('conv_bank'):
             # Convolution bank: concatenate on the last axis to stack channels from all convolutions
             conv_outputs = tf.concat(
-                    [conv1d(inputs, k, 128, tf.nn.elu, is_training, 'conv1d_%d' % k) for k in range(1, K + 1)],
-                    axis=-1
+                [conv1d(inputs, k, 128, tf.nn.elu, is_training, 'conv1d_%d' % k) for k in range(1, K + 1)],
+                axis=-1
             )
 
         # Maxpooling:
@@ -147,13 +149,13 @@ def cbhg(inputs, input_lengths, speaker_embd=None, is_training=True,
 
         # Bidirectional RNN
         outputs, states = tf.nn.bidirectional_dynamic_rnn(
-                GRUCell(gru_units),
-                GRUCell(gru_units),
-                h,
-                initial_state_fw=s,
-                initial_state_bw=s,
-                sequence_length=input_lengths,
-                dtype=tf.float32)
+            GRUCell(gru_units),
+            GRUCell(gru_units),
+            h,
+            initial_state_fw=s,
+            initial_state_bw=s,
+            sequence_length=input_lengths,
+            dtype=tf.float32)
         encoded = tf.concat(outputs, axis=2)  # Concat forward and backward
 
         return encoded
