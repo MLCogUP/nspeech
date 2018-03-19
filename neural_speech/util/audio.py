@@ -4,10 +4,10 @@ matplotlib.use("Agg")
 
 import librosa
 import librosa.filters
-import numpy as np
 import tensorflow as tf
 from scipy import signal
 from neural_speech.hparams import hparams
+import numpy as np
 
 try:
     import soundfile as sf
@@ -26,6 +26,15 @@ def load_wav(path, offset=0.0, duration=None, soundfile=False):
 def save_wav(wav, path):
     wav *= 32767 / max(0.01, np.max(np.abs(wav)))
     librosa.output.write_wav(path, wav, hparams.sample_rate)
+
+
+def load_spectrogram(path):
+    spec = np.load(path)
+    return spec, spec.shape[1]
+
+
+def save_spectrogram(spec, path):
+    np.save(path, spec, allow_pickle=False)
 
 
 def preemphasis(x):

@@ -114,7 +114,6 @@ class DataFeeder(object):
 
         # Read a group of examples:
         n = self._hparams.batch_size
-        r = self._hparams.outputs_per_step
         batches_per_group = self._hparams.batch_group_size
         examples = [self._get_next_example() for _ in range(n * batches_per_group)]
 
@@ -125,9 +124,15 @@ class DataFeeder(object):
         random.shuffle(batches)
 
         log('Generated %d batches of size %d in %.03f sec' % (len(batches), n, time.time() - start))
+        # TODO: make parallel?
         for batch in batches:
-            feed_dict = dict(zip(self._placeholders, _prepare_batch(batch, r)))
-            self._session.run(self._enqueue_op, feed_dict=feed_dict)
+            self.enqueue_batch(batch)
+
+    def enqueue_batch(self, batch):
+        r = self._hparams.outputs_per_step
+        # combine placeholders with their corresponding batched data
+        feed_dict = dict(zip(self._placeholders, _prepare_batch(batch, r)))
+        self._session.run(self._enqueue_op, feed_dict=feed_dict)
 
     def _get_next_example(self):
         '''Loads a single example (input, speaker_id, mel_target, linear_target, cost) from disk'''
@@ -137,7 +142,7 @@ class DataFeeder(object):
         wav_path, text, speaker_id, dataset_id = self._data_items[self._offset]
         self._offset += 1
 
-        wav_fn, wav, linear_target, mel_target, n_frames = process_utterance(wav_path)
+        wav_fn, wav, linear_target, mel_target, n_frames = process_utterance(wav_path, dataset_id)
 
         if self._cmudict and random.random() < _p_cmudict:
             text = ' '.join([self._maybe_get_arpabet(word) for word in text.split(' ')])
@@ -182,7 +187,3 @@ def _pad_target(t, length):
 def _round_up(x, multiple):
     remainder = x % multiple
     return x if remainder == 0 else x + multiple - remainder
-
-
-
-
