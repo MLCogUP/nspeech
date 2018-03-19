@@ -1,8 +1,10 @@
+import os.path
 import random
 import threading
 import time
 import traceback
 
+import joblib
 import matplotlib
 import numpy as np
 import tensorflow as tf
@@ -17,6 +19,7 @@ matplotlib.use('Agg')
 
 _p_cmudict = 0.5
 _pad = 0
+data = {}
 
 
 # TODO: maybe update to use tf thread handling?
@@ -32,6 +35,12 @@ class DataFeeder(object):
         self._offset = 0
         self._session = sess
         self._threads = []
+        self.processed_data = {}
+        self.dump_status = 1
+        self.id2speaker = {}
+
+        if os.path.isfile("/cache/data.joblib"):
+            self.processed_data = joblib.load("/cache/data.joblib")
 
         self._data_items = []
         # TODO: support more corpora by this function
@@ -43,7 +52,15 @@ class DataFeeder(object):
         for data_type, data_source in input_paths.items():
             self._data_items.extend(list(path_to_function[data_type](data_source)))
 
+        if os.path.isfile("/cache/id2speaker.joblib"):
+            self.id2speaker = joblib.load("/cache/id2speaker.joblib")
+        speakers = {(dataset_id, speaker_id) for (_, _, speaker_id, dataset_id) in self._data_items}
+        self.id2speaker.update(dict(enumerate(speakers)))
+        joblib.dump(self.id2speaker, "/cache/id2speaker.joblib")
+        self.speaker2id = {v: k for k, v in self.id2speaker.items()}
+
         log('Loaded data refs for %d examples' % len(self._data_items))
+        log('Loaded %d different speaker(s)' % len(self.speaker2id))
         assert len(self._data_items) > 0, "No data found"
 
         # Create placeholders for inputs and targets. Don't specify batch size because we want to
@@ -87,26 +104,26 @@ class DataFeeder(object):
         self._cmudict = None
 
     def start_threads(self, n_threads=1):
-        for _ in range(n_threads):
-            thread = threading.Thread(target=self.thread_main, args=())
+        for i in range(n_threads):
+            thread = threading.Thread(target=self.thread_main, args=(i,))
             thread.daemon = True  # Thread will close when parent quits.
             thread.start()
             self._threads.append(thread)
         return self._threads
 
-    def thread_main(self):
+    def thread_main(self, idx):
         try:
             stop = False
             # Go through the dataset multiple times
             while not stop:
-                self._enqueue_next_group()
+                self._enqueue_next_group(idx)
                 if self._coord.should_stop():
                     stop = True
         except Exception as e:
             traceback.print_exc()
             self._coord.request_stop(e)
 
-    def _enqueue_next_group(self):
+    def _enqueue_next_group(self, idx):
         """
         Loads a bunch of samples into memory, sorts them by output length and
         creates batches from it.
@@ -125,7 +142,7 @@ class DataFeeder(object):
         batches = [examples[i:i + n] for i in range(0, len(examples), n)]
         random.shuffle(batches)
 
-        log('Generated %d batches of size %d in %.03f sec' % (len(batches), n, time.time() - start))
+        log('T%d: Generated %d batches of size %d in %.03f sec' % (idx, len(batches), n, time.time() - start))
         # TODO: make parallel?
         for batch in batches:
             self.enqueue_batch(batch)
@@ -141,10 +158,18 @@ class DataFeeder(object):
         if self._offset >= len(self._data_items):
             self._offset = 0
             random.shuffle(self._data_items)
-        wav_path, text, speaker_id, dataset_id = self._data_items[self._offset]
+            self.dump_status = 1 if self.dump_status == 0 else 2
+        wav_path, text, local_speaker_id, dataset_id = self._data_items[self._offset]
+        speaker_id = self.speaker2id[dataset_id, local_speaker_id]
+
         self._offset += 1
 
-        wav_fn, wav, linear_target, mel_target, n_frames = process_utterance(wav_path, dataset_id)
+        if (wav_path, dataset_id) in self.processed_data:
+            wav_fn, wav, linear_target, mel_target, n_frames = self.processed_data[(wav_path, dataset_id)]
+        else:
+            wav_fn, wav, linear_target, mel_target, n_frames = process_utterance(wav_path, dataset_id)
+            self.processed_data[(wav_path, dataset_id)] = wav_fn, wav, linear_target, mel_target, n_frames
+            self.dump_status = 0
 
         if self._cmudict and random.random() < _p_cmudict:
             text = ' '.join([self._maybe_get_arpabet(word) for word in text.split(' ')])

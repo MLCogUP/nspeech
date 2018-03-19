@@ -1,3 +1,5 @@
+import joblib
+
 import matplotlib
 
 matplotlib.use('Agg')
@@ -39,6 +41,7 @@ def train(log_dir, args):
         coord = tf.train.Coordinator()
         with tf.variable_scope('datafeeder'):
             feeder = DataFeeder(sess, coord, input_paths, hparams)
+        hparams.num_speakers = len(feeder.speaker2id)
 
         # Set up model:
         global_step = tf.Variable(0, name='global_step', trainable=False)
@@ -106,6 +109,9 @@ def train(log_dir, args):
                     plot.plot_specgram(melgram, os.path.join(log_dir, 'step-{:06}-mel.png'.format(step)), "mel")
                     log('%s, %s, %s, step=%d, loss=%.5f' % (args.model, commit, time_string(), step, loss))
                     log('Input: %s' % sequence_to_text(input_seq))
+
+                    if feeder.dump_status == 2:
+                        joblib.dump(feeder.processed_data, "/cache/data.joblib", compress=0)
 
         except Exception as e:
             log('Exiting due to exception: %s' % e, slack=True)
