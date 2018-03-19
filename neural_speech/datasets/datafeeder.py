@@ -62,6 +62,8 @@ class DataFeeder(object):
                                       min_after_dequeue=int(hparams.min_dequeue_ratio * hparams.queue_size),
                                       dtypes=[tf.int32, tf.int32, tf.int32, tf.float32, tf.float32, tf.float32],
                                       name='input_queue')
+        self.size = queue.size()
+        self.capacity = hparams.queue_size
         self._enqueue_op = queue.enqueue(self._placeholders)
         self.inputs, self.input_lengths, self.speaker_ids, self.mel_targets, self.linear_targets, self.audio = queue.dequeue()
         self.inputs.set_shape(self._placeholders[0].shape)

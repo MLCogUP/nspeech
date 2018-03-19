@@ -73,11 +73,11 @@ def train(log_dir, args):
 
             while not coord.should_stop():
                 start_time = time.time()
-                step, loss, opt = sess.run([global_step, model.loss, model.optimize])
+                step, loss, opt, qsize = sess.run([global_step, model.loss, model.optimize, feeder.size])
                 time_window.append(time.time() - start_time)
                 loss_window.append(loss)
-                message = 'Step %-7d [%.03f sec/step, loss=%.05f, avg_loss=%.05f]' % (
-                    step, time_window.average, loss, loss_window.average)
+                message = 'Step %-7d [%.03f sec/step, loss=%.05f, avg_loss=%.05f, queue=%.02f]' % (
+                    step, time_window.average, loss, loss_window.average, (qsize / float(feeder.capacity)))
                 log(message, slack=(step % args.checkpoint_interval == 0))
 
                 if loss > 100 or math.isnan(loss):
@@ -97,13 +97,13 @@ def train(log_dir, args):
                         model.inputs[0], model.linear_outputs[0], model.mel_outputs[0], model.alignments[0]])
                     # TODO: replace with gpu griffinlim impl
                     waveform = audio.inv_spectrogram(spectrogram.T)
-                    audio.save_wav(waveform, os.path.join(log_dir, 'step-%d-audio.wav' % step))
+                    audio.save_wav(waveform, os.path.join(log_dir, 'step-{:06}-audio.wav'.format(step)))
                     # np.save(os.path.join(log_dir, 'step-%d-align.npy' % step), alignment)
-                    plot.plot_alignment(alignment, os.path.join(log_dir, 'step-%d-align.png' % step),
+                    plot.plot_alignment(alignment, os.path.join(log_dir, 'step-{:06}-align.png'.format(step)),
                                         info='%s, %s, %s, step=%d, loss=%.5f' % (
                                             args.model, commit, time_string(), step, loss))
-                    plot.plot_specgram(spectrogram, os.path.join(log_dir, 'step-%d-lin.png' % step), "linear")
-                    plot.plot_specgram(melgram, os.path.join(log_dir, 'step-%d-mel.png' % step), "mel")
+                    plot.plot_specgram(spectrogram, os.path.join(log_dir, 'step-{:06}-lin.png'.format(step)), "linear")
+                    plot.plot_specgram(melgram, os.path.join(log_dir, 'step-{:06}-mel.png'.format(step)), "mel")
                     log('%s, %s, %s, step=%d, loss=%.5f' % (args.model, commit, time_string(), step, loss))
                     log('Input: %s' % sequence_to_text(input_seq))
 
