@@ -5,7 +5,7 @@ from functools import partial
 
 import librosa
 
-from neural_speech.util import audio
+from neural_speech.utils import audio
 
 _min_samples = 2000
 _threshold_db = 25

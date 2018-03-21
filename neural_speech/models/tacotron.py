@@ -4,8 +4,8 @@ from tensorflow.contrib.seq2seq import BasicDecoder
 
 from neural_speech.models.utils.helpers import TacoTestHelper, TacoTrainingHelper
 from neural_speech.models.utils.modules import prenet, embedding, cbhg, attention_decoder
-from neural_speech.text.symbols import symbols
-from neural_speech.util.infolog import log
+from neural_speech.utils.infolog import log
+from neural_speech.utils.text.symbols import symbols
 
 
 class Tacotron():

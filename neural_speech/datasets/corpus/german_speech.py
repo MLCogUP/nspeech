@@ -7,7 +7,7 @@ from glob import glob
 import numpy as np
 from unidecode import unidecode
 
-from neural_speech.util import audio
+from neural_speech.utils import audio
 
 
 def build_from_path(in_dir, out_dir, num_workers=1, tqdm=lambda x: x):

@@ -14,13 +14,12 @@ import traceback
 from neural_speech.datasets.datafeeder import DataFeeder
 from neural_speech.hparams import hparams, hparams_debug_string
 from neural_speech.models import create_model
-from neural_speech.text import sequence_to_text
-from neural_speech.util import audio, ValueWindow, plot, get_git_commit, time_string, infolog
-from neural_speech.util.infolog import log
+from neural_speech.utils.text import sequence_to_text
+from neural_speech.utils import audio, ValueWindow, plot, time_string, infolog
+from neural_speech.utils.infolog import log
 
 
 def train(log_dir, args):
-    commit = get_git_commit() if args.git else 'None'
     checkpoint_path = os.path.join(log_dir, 'model.ckpt')
 
     input_paths = {}
@@ -67,9 +66,9 @@ def train(log_dir, args):
                 # Restore from a checkpoint if the user requested it.
                 restore_path = '%s-%d' % (checkpoint_path, args.restore_step)
                 saver.restore(sess, restore_path)
-                log('Resuming from checkpoint: %s at commit: %s' % (restore_path, commit), slack=True)
+                log('Resuming from checkpoint: %s' % restore_path, slack=True)
             else:
-                log('Starting new training run at commit: %s' % commit, slack=True)
+                log('Starting new training run', slack=True)
 
             feeder.start_threads(args.threads)
             log('Feeder started')
@@ -103,13 +102,14 @@ def train(log_dir, args):
                     audio.save_wav(waveform, os.path.join(log_dir, 'step-{:06}-audio.wav'.format(step)))
                     # np.save(os.path.join(log_dir, 'step-%d-align.npy' % step), alignment)
                     plot.plot_alignment(alignment, os.path.join(log_dir, 'step-{:06}-align.png'.format(step)),
-                                        info='%s, %s, %s, step=%d, loss=%.5f' % (
-                                            args.model, commit, time_string(), step, loss))
+                                        info='%s, %s, step=%d, loss=%.5f' % (
+                                            args.model, time_string(), step, loss))
                     plot.plot_specgram(spectrogram, os.path.join(log_dir, 'step-{:06}-lin.png'.format(step)), "linear")
                     plot.plot_specgram(melgram, os.path.join(log_dir, 'step-{:06}-mel.png'.format(step)), "mel")
-                    log('%s, %s, %s, step=%d, loss=%.5f' % (args.model, commit, time_string(), step, loss))
+                    log('%s, %s, step=%d, loss=%.5f' % (args.model, time_string(), step, loss))
                     log('Input: %s' % sequence_to_text(input_seq))
 
+                    # dumps feeder iff no changes are recognized
                     if feeder.dump_status == 2:
                         joblib.dump(feeder.processed_data, "/cache/data.joblib", compress=0)
 

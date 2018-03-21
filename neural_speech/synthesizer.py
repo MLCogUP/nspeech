@@ -3,8 +3,8 @@ import tensorflow as tf
 
 from neural_speech.hparams import hparams
 from neural_speech.models import create_model
-from neural_speech.text import text_to_sequence
-from neural_speech.util import audio
+from neural_speech.utils import audio
+from neural_speech.utils.text import text_to_sequence
 
 
 class Synthesizer:

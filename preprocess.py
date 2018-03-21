@@ -16,7 +16,7 @@ def preprocess_blizzard(args, in_dir, out_dir):
 
 def preprocess_ljspeech(args, in_dir, out_dir):
     os.makedirs(out_dir, exist_ok=True)
-    metadata = neural_speech.datasets.ljspeech.build_from_path(in_dir, out_dir, args.num_workers, tqdm=tqdm)
+    metadata = neural_speech.datasets.corpus.ljspeech.build_from_path(in_dir, out_dir, args.num_workers, tqdm=tqdm)
     write_metadata(metadata, out_dir)
 
 
@@ -34,8 +34,8 @@ def preprocess_pavoque(args, in_dir, out_dir):
 
 def preprocess_vctk(args, in_dir, out_dir):
     os.makedirs(out_dir, exist_ok=True)
-    metadata = neural_speech.datasets.vctk.build_from_path(in_dir, out_dir, args.num_workers, tqdm=tqdm,
-                                                           limit=args.limit)
+    metadata = neural_speech.datasets.corpus.vctk.build_from_path(in_dir, out_dir, args.num_workers, tqdm=tqdm,
+                                                                  limit=args.limit)
     write_metadata(metadata, out_dir)
 
 

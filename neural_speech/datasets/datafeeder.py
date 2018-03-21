@@ -9,11 +9,11 @@ import matplotlib
 import numpy as np
 import tensorflow as tf
 
-import neural_speech.datasets.ljspeech
-import neural_speech.datasets.vctk
+import neural_speech.datasets.corpus.ljspeech
+import neural_speech.datasets.corpus.vctk
 from neural_speech.datasets.process import process_utterance
-from neural_speech.text import text_to_sequence
-from neural_speech.util.infolog import log
+from neural_speech.utils.infolog import log
+from neural_speech.utils.text import text_to_sequence
 
 matplotlib.use('Agg')
 
@@ -45,9 +45,9 @@ class DataFeeder(object):
         self._data_items = []
         # TODO: support more corpora by this function
         path_to_function = {
-            "vctk": neural_speech.datasets.vctk.load_file_names,
-            "ljspeech": neural_speech.datasets.ljspeech.load_file_names,
-            "librispeech": neural_speech.datasets.ljspeech.load_libre_2
+            "vctk": neural_speech.datasets.corpus.vctk.load_file_names,
+            "ljspeech": neural_speech.datasets.corpus.ljspeech.load_file_names,
+            "librispeech": neural_speech.datasets.corpus.ljspeech.load_libre_2
         }
         for data_type, data_source in input_paths.items():
             self._data_items.extend(list(path_to_function[data_type](data_source)))
