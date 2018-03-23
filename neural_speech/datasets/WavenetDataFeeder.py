@@ -3,15 +3,15 @@ import random
 import threading
 import traceback
 
+import joblib
 import numpy as np
 import tensorflow as tf
 from scipy.misc import imresize
 
-import datasets.corpus
-import datasets.process
-from datasets.datafeeder import get_category_cardinality
-from text import text_to_sequence
-from util import log, audio
+import neural_speech.datasets.corpus
+import neural_speech.datasets.process
+from neural_speech.utils import log, audio
+from neural_speech.utils.text import text_to_sequence
 
 
 class WavenetDataFeeder(object):
@@ -37,18 +37,23 @@ class WavenetDataFeeder(object):
     def load_data(self, input_paths):
         # TODO: support more corpora by this function
         path_to_function = {
-            "vctk": datasets.corpus.vctk.load_file_names,
-            "ljspeech": datasets.corpus.ljspeech.load_file_names,
-            "librispeech": datasets.corpus.ljspeech.load_libre_2
+            "vctk": neural_speech.datasets.corpus.vctk.load_file_names,
+            "ljspeech": neural_speech.datasets.corpus.ljspeech.load_file_names,
+            "librispeech": neural_speech.datasets.corpus.ljspeech.load_libre_2
         }
         for data_type, data_source in input_paths.items():
             self._data_items.extend(list(path_to_function[data_type](data_source)))
 
-        log('Loaded data refs for %d examples' % len(self._data_items))
-        assert len(self._data_items) > 0, "No data found"
+        if os.path.isfile("/cache/id2speaker.joblib"):
+            self.id2speaker = joblib.load("/cache/id2speaker.joblib")
+        speakers = {(dataset_id, speaker_id) for (_, _, speaker_id, dataset_id) in self._data_items}
+        self.id2speaker.update(dict(enumerate(speakers)))
+        joblib.dump(self.id2speaker, "/cache/id2speaker.joblib")
+        self.speaker2id = {v: k for k, v in self.id2speaker.items()}
 
-        _, self.speaker_cardinality = get_category_cardinality(self._data_items)
-        self.speaker_cardinality += 1
+        log('Loaded data refs for %d examples' % len(self._data_items))
+        log('Loaded %d different speaker(s)' % len(self.speaker2id))
+        assert len(self._data_items) > 0, "No data found"
 
     def add_placeholders(self):
         hp = self._hparams
@@ -63,15 +68,14 @@ class WavenetDataFeeder(object):
         ]
 
         # Create queue for buffering data:
-        # queue = tf.RandomShuffleQueue(hp.queue_size,
-        #                               min_after_dequeue=int(hp.min_dequeue_ratio * hp.queue_size),
-        #                               dtypes=[tf.float32, tf.int32, tf.float32, tf.float32],
-        #                               name='input_queue')
-        queue = tf.FIFOQueue(hp.queue_size,
-                             dtypes=[tf.float32, tf.int32, tf.float32, tf.float32],
-                             shapes=[[audio_length], [1], [audio_length, hp.num_freq], [audio_length, hp.num_mels]],
-                             name='input_queue')
-
+        queue = tf.RandomShuffleQueue(hp.queue_size,
+                                      min_after_dequeue=int(hp.min_dequeue_ratio * hp.queue_size),
+                                      dtypes=[tf.float32, tf.int32, tf.float32, tf.float32],
+                                      shapes=[[audio_length], [1],
+                                              [audio_length, hp.num_freq], [audio_length, hp.num_mels]],
+                                      name='input_queue')
+        self.size = queue.size()
+        self.capacity = hp.queue_size
         self._enqueue_op = queue.enqueue(self._placeholders)
         self.audio, self.speaker_ids, self.linear_targets, self.mel_targets = queue.dequeue_many(hp.batch_size)
 
@@ -106,7 +110,7 @@ class WavenetDataFeeder(object):
         # trim wav
         if self.silence_threshold is not None:
             # Remove silence
-            wav = datasets.process.trim_silence(wav, self.silence_threshold)
+            wav = neural_speech.datasets.process.trim_silence(wav, self.silence_threshold)
             if wav.size == 0:
                 print("Warning: {} was ignored as it contains only "
                       "silence. Consider decreasing trim_silence "
@@ -136,7 +140,9 @@ class WavenetDataFeeder(object):
         if self._offset >= len(self._data_items):
             self._offset = 0
             random.shuffle(self._data_items)
-        wav_path, text, speaker_id = self._data_items[self._offset]
+        wav_path, text, local_speaker_id, dataset_id = self._data_items[self._offset]
+        speaker_id = self.speaker2id[dataset_id, local_speaker_id]
+
         self._offset += 1
 
         # Load the audio to a numpy array:

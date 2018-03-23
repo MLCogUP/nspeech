@@ -1,22 +1,18 @@
-import joblib
-
-import matplotlib
-
-matplotlib.use('Agg')
-
 import argparse
 import math
 import os
 import time
-import tensorflow as tf
 import traceback
+
+import joblib
+import tensorflow as tf
 
 from neural_speech.datasets.datafeeder import DataFeeder
 from neural_speech.hparams import hparams, hparams_debug_string
 from neural_speech.models import create_model
-from neural_speech.utils.text import sequence_to_text
 from neural_speech.utils import audio, ValueWindow, plot, time_string, infolog
 from neural_speech.utils.infolog import log
+from neural_speech.utils.text import sequence_to_text
 
 
 def prepare_input_paths(args):

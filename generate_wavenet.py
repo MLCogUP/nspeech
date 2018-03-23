@@ -10,8 +10,8 @@ import librosa
 import numpy as np
 import tensorflow as tf
 
-import datasets.process
-from models.wavenet import mu_law_encode, mu_law_decode, WaveNetModel
+import neural_speech.datasets.process
+from neural_speech.models.wavenet import mu_law_encode, mu_law_decode, WaveNetModel
 from train_wavenet import HPARAMS
 
 SAMPLES = 16000
@@ -34,7 +34,7 @@ def create_seed(filename,
                 window_size,
                 silence_threshold=SILENCE_THRESHOLD):
     audio, _ = librosa.load(filename, sr=sample_rate, mono=True)
-    audio = datasets.process.trim_silence(audio, silence_threshold)
+    audio = neural_speech.datasets.process.trim_silence(audio, silence_threshold)
 
     quantized = mu_law_encode(audio, quantization_channels)
     cut_index = tf.cond(tf.size(quantized) < tf.constant(window_size),

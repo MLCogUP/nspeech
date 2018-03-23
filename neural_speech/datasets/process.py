@@ -8,8 +8,7 @@ import numpy as np
 from neural_speech.utils import audio
 
 
-
-def build_from_path(filenames, out_dir, num_workers=1, tqdm=lambda x: x, limit=0):
+def build_from_path(filenames, num_workers=1, tqdm=lambda x: x, limit=0):
     executor = ProcessPoolExecutor(max_workers=num_workers)
     futures = []
     for wav_path, text, speaker_id, dataset_id in filenames:

@@ -1,78 +1,67 @@
-import matplotlib
-import tensorflow as tf
-
-from datasets.WavenetDataFeeder import WavenetDataFeeder
-
-matplotlib.use('Agg')
-
 import argparse
 import math
 import os
 import time
 import traceback
 
-import models
-from util import ValueWindow, infolog
-from util.infolog import log
+import tensorflow as tf
+
+import neural_speech.models
+from neural_speech.datasets.WavenetDataFeeder import WavenetDataFeeder
+from neural_speech.utils import ValueWindow, infolog
+from neural_speech.utils.infolog import log
+from train import prepare_input_paths
 
 HPARAMS = tf.contrib.training.HParams(
-        # Comma-separated list of cleaners to run on text prior to training and eval. For non-English
-        # text, you may want to use "basic_cleaners" or "transliteration_cleaners" See TRAINING_DATA.md.
-        cleaners='english_cleaners',
+    # Comma-separated list of cleaners to run on text prior to training and eval. For non-English
+    # text, you may want to use "basic_cleaners" or "transliteration_cleaners" See TRAINING_DATA.md.
+    cleaners='english_cleaners',
 
-        # Audio:
-        num_mels=80,
-        num_freq=1025,  # 2048,
-        sample_rate=16000,  # 24000,
-        frame_length_ms=50,
-        frame_shift_ms=12.5,
-        preemphasis=0.97,
-        min_level_db=-100,
-        ref_level_db=20,
+    # Audio:
+    num_mels=80,
+    num_freq=1025,  # 2048,
+    sample_rate=16000,  # 24000,
+    frame_length_ms=50,
+    frame_shift_ms=12.5,
+    preemphasis=0.97,
+    min_level_db=-100,
+    ref_level_db=20,
 
-        # custom
-        silence_threshold=0.1,
+    # custom
+    silence_threshold=0.1,
 
-        # Model:
-        outputs_per_step=5,
-        filter_width=2,
-        dilations=[1, 2, 4, 8, 16, 32, 64, 128, 256, 512,
-                   1, 2, 4, 8, 16, 32, 64, 128, 256, 512,
-                   1, 2, 4, 8, 16, 32, 64, 128, 256, 512,
-                   1, 2, 4, 8, 16, 32, 64, 128, 256, 512,
-                   1, 2, 4, 8, 16, 32, 64, 128, 256, 512],
-        # dilations=[1, 2, 4, 8, 16, 32],
-        residual_channels=32,
-        # residual_channels=8,
-        dilation_channels=32,
-        # dilation_channels=8,
-        quantization_channels=256,
-        # quantization_channels=64,
-        skip_channels=512,
-        # skip_channels=128,
-        use_biases=False,
-        scalar_input=False,
-        initial_filter_width=32,
-        gc_channels=16,  # speaker embedding size
-        gc_category_cardinality=276,  # maximum speaker id
-        lc_channels=0,
-        l2_regularization_strength=0,
+    # Model:
+    outputs_per_step=5,
+    filter_width=2,
+    dilations=[1, 2, 4, 8, 16, 32, 64, 128, 256, 512,
+               1, 2, 4, 8, 16, 32, 64, 128, 256, 512,
+               1, 2, 4, 8, 16, 32, 64, 128, 256, 512,
+               1, 2, 4, 8, 16, 32, 64, 128, 256, 512,
+               1, 2, 4, 8, 16, 32, 64, 128, 256, 512],
+    residual_channels=32,
+    dilation_channels=32,
+    quantization_channels=256,
+    skip_channels=512,
+    use_biases=False,
+    scalar_input=False,
+    initial_filter_width=32,
+    gc_channels=16,  # speaker embedding size
+    gc_category_cardinality=276,  # maximum speaker id
+    lc_channels=0,
+    l2_regularization_strength=0,
 
-        # Training:
-        batch_size=1,
-        batch_group_size=1,
-        queue_size=32,  # number of batches stored in queue
-        min_dequeue_ratio=0,
-        adam_beta1=0.9,
-        adam_beta2=0.999,
-        initial_learning_rate=0.002,
-        learning_rate_decay_halflife=100000,
-        decay_learning_rate=True
+    # Training:
+    batch_size=1,
+    queue_size=32,  # number of batches stored in queue
+    min_dequeue_ratio=0,
+    adam_beta1=0.9,
+    adam_beta2=0.999,
+    initial_learning_rate=0.002,
+    learning_rate_decay_halflife=100000,
+    decay_learning_rate=True
 )
 
 tf_config = tf.ConfigProto(log_device_placement=False)
-
-from train import prepare_input_paths
 
 
 def hparams_debug_string():
@@ -97,53 +86,21 @@ def train_wavenet(log_dir, args):
         # Create coordinator.
         coord = tf.train.Coordinator()
 
-        # Load raw waveform from VCTK corpus.
-        # with tf.name_scope('create_inputs'):
-        # Allow silence trimming to be skipped by specifying a threshold near
-        # zero.
-        # silence_threshold = args.silence_threshold if args.silence_threshold > \
-        #                                               EPSILON else None
-        # gc_enabled = args.gc_channels is not None
-        # reader = AudioReader(
-        #     args.data_dir,
-        #     coord,
-        #     sample_rate=wavenet_params['sample_rate'],
-        #     gc_enabled=gc_enabled,
-        #     receptive_field=WaveNetModel.calculate_receptive_field(wavenet_params["filter_width"],
-        #                                                            wavenet_params["dilations"],
-        #                                                            wavenet_params["scalar_input"],
-        #                                                            wavenet_params["initial_filter_width"]),
-        #     sample_size=args.sample_size,
-        #     silence_threshold=silence_threshold)
-        # audio_batch = reader.dequeue(args.batch_size)
-        # if gc_enabled:
-        #     gc_id_batch = reader.dequeue_gc(args.batch_size)
-        # else:
-        #     gc_id_batch = None
-
         global_step = tf.Variable(0, name='global_step', trainable=False)
         # Create network.
-        model = models.create_model("wavenet", hp)
+        model = neural_speech.models.create_model("wavenet", hp)
 
         with tf.variable_scope('datafeeder'):
             feeder = WavenetDataFeeder(sess, coord, input_paths, model.receptive_field, hp)
+        hp.num_speakers = len(feeder.speaker2id)
 
         if hp.l2_regularization_strength == 0:
             hp.l2_regularization_strength = None
         # TODO
-        model.initialize(feeder.audio, feeder.speaker_ids)#, feeder.mel_targets)
+        model.initialize(feeder.audio, feeder.speaker_ids)  # , feeder.mel_targets)
         model.add_loss()
-        # ,
-        # global_condition_batch=gc_id_batch,
-        # l2_regularization_strength=args.l2_regularization_strength)
         model.add_optimizer(global_step)
         model.add_stats()
-
-        # Set up logging for TensorBoard.
-        # writer = tf.summary.FileWriter(logdir)
-        # writer.add_graph(tf.get_default_graph())
-        # run_metadata = tf.RunMetadata()
-        # summaries = tf.summary.merge_all()
 
         # Bookkeeping:
         time_window = ValueWindow(100)
@@ -167,11 +124,11 @@ def train_wavenet(log_dir, args):
 
             while not coord.should_stop():
                 start_time = time.time()
-                step, loss, opt = sess.run([global_step, model.loss, model.optimize])
+                step, loss, opt, qsize = sess.run([global_step, model.loss, model.optimize, feeder.size])
                 time_window.append(time.time() - start_time)
                 loss_window.append(loss)
-                message = 'Step %-7d [%.03f sec/step, loss=%.05f, avg_loss=%.05f]' % (
-                    step, time_window.average, loss, loss_window.average)
+                message = 'Step %-7d [%.03f sec/step, loss=%.05f, avg_loss=%.05f, queue=%.02f]' % (
+                    step, time_window.average, loss, loss_window.average, (qsize / float(feeder.capacity)))
                 log(message, slack=(step % args.checkpoint_interval == 0))
 
                 if loss > 100 or math.isnan(loss):
@@ -185,18 +142,6 @@ def train_wavenet(log_dir, args):
                 if step % args.checkpoint_interval == 0:
                     log('Saving checkpoint to: %s-%d' % (checkpoint_path, step))
                     saver.save(sess, checkpoint_path, global_step=step)
-                    # log('Saving audio and alignment...')
-                    # compute one example
-                    # input_seq, spectrogram, alignment = sess.run([
-                    #         model.inputs[0], model.linear_outputs[0], model.alignments[0]])
-                    #     waveform = audio.inv_spectrogram(spectrogram.T)
-                    #     audio.save_wav(waveform, os.path.join(log_dir, 'step-%d-audio.wav' % step))
-                    #     # np.save(os.path.join(log_dir, 'step-%d-align.npy' % step), alignment)
-                    #     plot.plot_alignment(alignment, os.path.join(log_dir, 'step-%d-align.png' % step),
-                    #                         info='%s, %s, %s, step=%d, loss=%.5f' % (
-                    #                             args.model, commit, time_string(), step, loss))
-                    #     log('%s, %s, %s, step=%d, loss=%.5f' % (args.model, commit, time_string(), step, loss))
-                    #     log('Input: %s' % sequence_to_text(input_seq))
 
         except Exception as e:
             log('Exiting due to exception: %s' % e, slack=True)

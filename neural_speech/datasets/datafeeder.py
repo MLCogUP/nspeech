@@ -5,17 +5,13 @@ import time
 import traceback
 
 import joblib
-import matplotlib
 import numpy as np
 import tensorflow as tf
 
-import neural_speech.datasets.corpus.ljspeech
-import neural_speech.datasets.corpus.vctk
+import neural_speech.datasets.corpus
 from neural_speech.datasets.process import process_utterance
 from neural_speech.utils.infolog import log
 from neural_speech.utils.text import text_to_sequence
-
-matplotlib.use('Agg')
 
 _p_cmudict = 0.5
 _pad = 0
@@ -87,7 +83,7 @@ class DataFeeder(object):
                                       dtypes=[tf.int32, tf.int32, tf.int32, tf.float32, tf.float32, tf.float32],
                                       name='input_queue')
         self.size = queue.size()
-        self.capacity = hparams.queue_size
+        self.capacity = hp.queue_size
         self._enqueue_op = queue.enqueue(self._placeholders)
         self.inputs, self.input_lengths, self.speaker_ids, self.mel_targets, self.linear_targets, self.audio = queue.dequeue()
         self.inputs.set_shape(self._placeholders[0].shape)
