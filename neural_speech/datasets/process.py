@@ -1,15 +1,12 @@
 import os
-import re
 from concurrent.futures import ProcessPoolExecutor
 from functools import partial
 
 import librosa
+import numpy as np
 
 from neural_speech.utils import audio
 
-_min_samples = 2000
-_threshold_db = 25
-_speaker_re = re.compile(r'p([0-9]+)_')
 
 
 def build_from_path(filenames, out_dir, num_workers=1, tqdm=lambda x: x, limit=0):
@@ -29,7 +26,7 @@ def process_utterance(wav_path, dataset_id):
 
     # Load the audio to a numpy array:
     # wav = _trim_wav(audio.load_wav(wav_path))
-    wav = _trim_wav(audio.load_wav(wav_path))
+    wav = trim_wav(audio.load_wav(wav_path))
     # Compute the linear-scale spectrogram from the wav:
     spectrogram = audio.spectrogram(wav)
     n_frames = spectrogram.shape[1]
@@ -40,21 +37,33 @@ def process_utterance(wav_path, dataset_id):
     return idx, wav, spectrogram.T, mel_spectrogram.T, n_frames
 
 
-def _trim_wav(wav):
+def trim_wav(wav, threshold_db=25):
     '''Trims silence from the ends of the wav'''
-    splits = librosa.effects.split(wav, _threshold_db, frame_length=1024, hop_length=512)
+    splits = librosa.effects.split(wav, threshold_db, frame_length=1024, hop_length=512)
     return wav[_find_start(splits):_find_end(splits, len(wav))]
 
 
-def _find_start(splits):
+def trim_silence(wav, threshold, frame_length=2048):
+    '''Removes silence at the beginning and end of a sample.'''
+    if wav.size < frame_length:
+        frame_length = wav.size
+    energy = librosa.feature.rmse(wav, frame_length=frame_length)
+    frames = np.nonzero(energy > threshold)
+    indices = librosa.core.frames_to_samples(frames)[1]
+
+    # Note: indices can be an empty array, if the whole audio was silence.
+    return wav[indices[0]:indices[-1]] if indices.size else wav[:0]
+
+
+def _find_start(splits, min_samples=2000):
     for split_start, split_end in splits:
-        if split_end - split_start > _min_samples:
-            return max(0, split_start - _min_samples)
+        if split_end - split_start > min_samples:
+            return max(0, split_start - min_samples)
     return 0
 
 
-def _find_end(splits, num_samples):
+def _find_end(splits, num_samples, min_samples=2000):
     for split_start, split_end in reversed(splits):
-        if split_end - split_start > _min_samples:
-            return min(num_samples, split_end + _min_samples)
+        if split_end - split_start > min_samples:
+            return min(num_samples, split_end + min_samples)
     return num_samples

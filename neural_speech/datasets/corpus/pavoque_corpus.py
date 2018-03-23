@@ -1,5 +1,3 @@
-# from yaml import CLoader as Loader
-import io
 import os
 from concurrent.futures import ProcessPoolExecutor
 from functools import partial
@@ -64,7 +62,7 @@ def _process_utterance(out_dir, index, flac_path, offset, duration, text):
     spectrogram_path = os.path.join(out_dir, spectrogram_filename)
     mel_filename = 'pavoque-mel-%05d.npy' % index
     mel_path = os.path.join(out_dir, mel_filename)
-    wav_fn = os.path.basename(wav_path)
+    wav_fn = os.path.basename(flac_path)
 
     try:
         if os.path.exists(spectrogram_path):

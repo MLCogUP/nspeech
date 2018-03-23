@@ -19,9 +19,7 @@ from neural_speech.utils import audio, ValueWindow, plot, time_string, infolog
 from neural_speech.utils.infolog import log
 
 
-def train(log_dir, args):
-    checkpoint_path = os.path.join(log_dir, 'model.ckpt')
-
+def prepare_input_paths(args):
     input_paths = {}
     if args.vctk:
         input_paths["vctk"] = args.vctk
@@ -29,6 +27,14 @@ def train(log_dir, args):
         input_paths["ljspeech"] = args.ljspeech
     if args.librispeech:
         input_paths["librispeech"] = args.librispeech
+
+    return input_paths
+
+
+def train(log_dir, args):
+    checkpoint_path = os.path.join(log_dir, 'model.ckpt')
+
+    input_paths = prepare_input_paths(args)
 
     log('Checkpoint path: %s' % checkpoint_path)
     log('Loading training data from: %s' % input_paths)

@@ -91,9 +91,6 @@ ENV/
 # mkdocs
 /site
 
-# custom definitions
-run*.sh
-
 logs
 data
 tmp

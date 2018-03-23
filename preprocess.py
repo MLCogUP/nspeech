@@ -4,13 +4,17 @@ import argparse
 import multiprocessing
 import os
 
-import neural_speech.datasets
+import neural_speech.datasets.corpus.blizzard
+import neural_speech.datasets.corpus.ljspeech
+import neural_speech.datasets.corpus.german_speech
+import neural_speech.datasets.corpus.pavoque_corpus
+import neural_speech.datasets.corpus.vctk
 from neural_speech.hparams import hparams
 
 
 def preprocess_blizzard(args, in_dir, out_dir):
     os.makedirs(out_dir, exist_ok=True)
-    metadata = neural_speech.datasets.blizzard.build_from_path(in_dir, out_dir, args.num_workers, tqdm=tqdm)
+    metadata = neural_speech.datasets.corpus.blizzard.build_from_path(in_dir, out_dir, args.num_workers, tqdm=tqdm)
     write_metadata(metadata, out_dir)
 
 
@@ -22,13 +26,13 @@ def preprocess_ljspeech(args, in_dir, out_dir):
 
 def preprocess_german_speech(args, in_dir, out_dir):
     os.makedirs(out_dir, exist_ok=True)
-    metadata = neural_speech.datasets.german_speech.build_from_path(in_dir, out_dir, args.num_workers, tqdm=tqdm)
+    metadata = neural_speech.datasets.corpus.german_speech.build_from_path(in_dir, out_dir, args.num_workers, tqdm=tqdm)
     write_metadata(metadata, out_dir)
 
 
 def preprocess_pavoque(args, in_dir, out_dir):
     os.makedirs(out_dir, exist_ok=True)
-    metadata = neural_speech.datasets.pavoque_corpus.build_from_path(in_dir, out_dir, args.num_workers, tqdm=tqdm)
+    metadata = neural_speech.datasets.corpus.pavoque_corpus.build_from_path(in_dir, out_dir, args.num_workers, tqdm=tqdm)
     write_metadata(metadata, out_dir)
 
 
