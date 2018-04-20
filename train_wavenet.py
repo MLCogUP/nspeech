@@ -33,11 +33,8 @@ HPARAMS = tf.contrib.training.HParams(
     # Model:
     outputs_per_step=5,
     filter_width=2,
-    dilations=[1, 2, 4, 8, 16, 32, 64, 128, 256, 512,
-               1, 2, 4, 8, 16, 32, 64, 128, 256, 512,
-               1, 2, 4, 8, 16, 32, 64, 128, 256, 512,
-               1, 2, 4, 8, 16, 32, 64, 128, 256, 512,
-               1, 2, 4, 8, 16, 32, 64, 128, 256, 512],
+    dilations_depth=5,
+    dilations_length=10,
     residual_channels=32,
     dilation_channels=32,
     quantization_channels=256,
@@ -47,11 +44,12 @@ HPARAMS = tf.contrib.training.HParams(
     initial_filter_width=32,
     gc_channels=16,  # speaker embedding size
     gc_category_cardinality=276,  # maximum speaker id
-    lc_channels=0,
+    lc_channels=80,
     l2_regularization_strength=0,
 
     # Training:
     batch_size=1,
+    sample_size=1,  # TODO larger samples possible?
     queue_size=32,  # number of batches stored in queue
     min_dequeue_ratio=0,
     adam_beta1=0.9,
@@ -97,7 +95,11 @@ def train_wavenet(log_dir, args):
         if hp.l2_regularization_strength == 0:
             hp.l2_regularization_strength = None
         # TODO
-        model.initialize(feeder.audio, feeder.speaker_ids)  # , feeder.mel_targets)
+        print(feeder.mel_targets)
+        if hp.lc_channels > 0:
+            model.initialize(feeder.audio, feeder.speaker_ids, feeder.mel_targets)
+        else:
+            model.initialize(feeder.audio, feeder.speaker_ids)
         model.add_loss()
         model.add_optimizer(global_step)
         model.add_stats()
@@ -151,7 +153,7 @@ def train_wavenet(log_dir, args):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--base_dir', default=os.path.expanduser('.'))
+    parser.add_argument('--log-dir', default=os.path.expanduser('logs'))
     parser.add_argument('--vctk', default='')
     parser.add_argument('--ljspeech', default='', help="Related to preprocessed wav files")
     parser.add_argument('--librispeech', default='', help="Related to raw flac files (big corpus)")
@@ -160,13 +162,13 @@ def main():
     parser.add_argument('--name', help='Name of the run. Used for logging. Defaults to model name.')
     parser.add_argument('--hparams', default='',
                         help='Hyperparameter overrides as a comma-separated list of name=value pairs')
-    parser.add_argument('--restore_step', type=int, help='Global step to restore from checkpoint.')
-    parser.add_argument('--summary_interval', type=int, default=1000,
+    parser.add_argument('--restore-step', type=int, help='Global step to restore from checkpoint.')
+    parser.add_argument('--summary-interval', type=int, default=1000,
                         help='Steps between running summary ops.')
-    parser.add_argument('--checkpoint_interval', type=int, default=1000,
+    parser.add_argument('--checkpoint-interval', type=int, default=1000,
                         help='Steps between writing checkpoints.')
-    parser.add_argument('--slack_url', help='Slack webhook URL to get periodic reports.')
-    parser.add_argument('--tf_log_level', type=int, default=1, help='Tensorflow C++ log level.')
+    parser.add_argument('--slack-url', help='Slack webhook URL to get periodic reports.')
+    parser.add_argument('--tf-log-level', type=int, default=1, help='Tensorflow C++ log level.')
     parser.add_argument('--git', action='store_true', help='If set, verify that the client is clean.')
     parser.add_argument('--gpu', default=0, type=int, help='Select gpu for computation')
     parser.add_argument('--threads', default=1, type=int, help='Select number of threads for enqueue operation')
@@ -174,7 +176,7 @@ def main():
     os.environ['TF_CPP_MIN_LOG_LEVEL'] = str(args.tf_log_level)
     os.environ['CUDA_VISIBLE_DEVICES'] = str(args.gpu)  # added available gpu
     run_name = args.name or args.model
-    log_dir = os.path.join(args.base_dir, '..', 'logs', run_name)
+    log_dir = os.path.join(args.log_dir, run_name)
     os.makedirs(log_dir, exist_ok=True)
     infolog.init(os.path.join(log_dir, 'train.log'), run_name, args.slack_url)
     HPARAMS.parse(args.hparams)

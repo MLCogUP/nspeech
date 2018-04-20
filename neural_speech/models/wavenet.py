@@ -100,7 +100,9 @@ class WaveNetModel(object):
         '''
         self._hparams = hparams
         self.batch_size = hparams.batch_size
-        self.dilations = hparams.dilations
+        self.dilations_length = hparams.dilations_length
+        self.dilations_depth = hparams.dilations_depth
+        self.dilations = [2 ** i for j in range(self.dilations_depth) for i in range(self.dilations_length)]
         self.filter_width = hparams.filter_width
         self.residual_channels = hparams.residual_channels
         self.dilation_channels = hparams.dilation_channels
@@ -117,6 +119,8 @@ class WaveNetModel(object):
             self.filter_width, self.dilations, self.scalar_input,
             self.initial_filter_width)
         self.variables = self._create_variables()
+
+        # TODO initialize network
 
     # TODO: change to method?
     @staticmethod
@@ -284,44 +288,54 @@ class WaveNetModel(object):
 
         weights_filter = variables['filter']
         weights_gate = variables['gate']
-
+        print("input:", input_batch)
+        print("dilation:", dilation)
+        print("filter:", weights_filter)
+        print("gate:", weights_gate)
         conv_filter = causal_conv(input_batch, weights_filter, dilation)
         conv_gate = causal_conv(input_batch, weights_gate, dilation)
+        print("conv filter:", conv_filter)
+        print("conv gate:", conv_gate)
 
         if global_condition_batch is not None:
+            print("gc", global_condition_batch)
             weights_gc_filter = variables['gc_filtweights']
+            weights_gc_gate = variables['gc_gateweights']
+            print("gc filter:", weights_gc_filter)
+            print("gc gate:", weights_gc_gate)
             conv_filter = conv_filter + tf.nn.conv1d(global_condition_batch,
                                                      weights_gc_filter,
                                                      stride=1,
                                                      padding="SAME",
                                                      name="gc_filter")
-            weights_gc_gate = variables['gc_gateweights']
             conv_gate = conv_gate + tf.nn.conv1d(global_condition_batch,
                                                  weights_gc_gate,
                                                  stride=1,
                                                  padding="SAME",
                                                  name="gc_gate")
+            print("gc conv filter:", conv_filter)
+            print("gc conv gate:", conv_gate)
+
         # TODO: Add local condition batch
         if local_condition_batch is not None:
-            with tf.variable_scope("upsample"):
-                local_condition_batch = tf.transpose(local_condition_batch, [0, 2, 1])
-                # TODO: upsampling
-                local_condition_batch = tf.layers.conv1d(local_condition_batch, tf.shape(conv_filter)[1],
-                                                         1, 1, padding="same")
-                local_condition_batch = tf.transpose(local_condition_batch, [0, 2, 1])
-
+            print("lc", local_condition_batch)
             weights_lc_filter = variables['lc_filtweights']
+            weights_lc_gate = variables['lc_gateweights']
+            print("lc filter:", weights_lc_filter)
+            print("lc gate:", weights_lc_gate)
             conv_filter = conv_filter + tf.nn.conv1d(local_condition_batch,
                                                      weights_lc_filter,
                                                      stride=1,
                                                      padding="SAME",
                                                      name="lc_filter")
-            weights_lc_gate = variables['lc_gateweights']
             conv_gate = conv_gate + tf.nn.conv1d(local_condition_batch,
                                                  weights_lc_gate,
                                                  stride=1,
                                                  padding="SAME",
                                                  name="lc_gate")
+            print("lc conv filter:", conv_filter)
+            print("lc conv gate:", conv_gate)
+
         if self.use_biases:
             filter_bias = variables['filter_bias']
             gate_bias = variables['gate_bias']
@@ -647,25 +661,29 @@ class WaveNetModel(object):
         The variables are all scoped to the given name.
         '''
         with tf.name_scope("inference"):
+            print("audio1:", audio_inputs)
             # add this for transformation
             input_batch = tf.reshape(audio_inputs, [self.batch_size, -1, 1])
             # We mu-law encode and quantize the input audioform.
             encoded_input = mu_law_encode(input_batch,
                                           self.quantization_channels)
-
+            print("audio2:", encoded_input)
             gc_embedding = self._embed_gc(global_conditions)
             encoded = self._one_hot(encoded_input)
+            print("audio3:", encoded)
             if self.scalar_input:
                 network_input = tf.reshape(
                     tf.cast(input_batch, tf.float32),
                     [self.batch_size, -1, 1])
             else:
                 network_input = encoded
-
+            print("audio4:", network_input)
             # Cut off the last sample of network input to preserve causality.
             network_input_width = tf.shape(network_input)[1] - 1
             network_input = tf.slice(network_input, [0, 0, 0],
                                      [-1, network_input_width, -1])
+            # network_input, target_output = tf.split(network_input, [network_input_width, 1], 1)
+            print("audio5:", network_input)
 
             raw_output = self._create_network(network_input, gc_embedding, local_condition_batch=local_conditions)
 

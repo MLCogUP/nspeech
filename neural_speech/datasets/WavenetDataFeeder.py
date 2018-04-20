@@ -26,7 +26,7 @@ class WavenetDataFeeder(object):
         self._threads = []
 
         self.silence_threshold = 0.1
-        self.sample_size = 32
+        self.sample_size = hparams.sample_size
         self.receptive_field = receptive_field
 
         self._data_items = []
@@ -63,16 +63,18 @@ class WavenetDataFeeder(object):
         self._placeholders = [
             tf.placeholder(tf.float32, [audio_length], 'audio'),
             tf.placeholder(tf.int32, [1], 'speaker_ids'),
-            tf.placeholder(tf.float32, [audio_length, hp.num_freq], 'linear_targets'),
-            tf.placeholder(tf.float32, [audio_length, hp.num_mels], 'mel_targets'),
+            tf.placeholder(tf.float32, [audio_length - self.sample_size, hp.num_freq], 'linear_targets'),
+            tf.placeholder(tf.float32, [audio_length - self.sample_size, hp.num_mels], 'mel_targets'),
         ]
 
         # Create queue for buffering data:
         queue = tf.RandomShuffleQueue(hp.queue_size,
                                       min_after_dequeue=int(hp.min_dequeue_ratio * hp.queue_size),
                                       dtypes=[tf.float32, tf.int32, tf.float32, tf.float32],
-                                      shapes=[[audio_length], [1],
-                                              [audio_length, hp.num_freq], [audio_length, hp.num_mels]],
+                                      shapes=[[audio_length],
+                                              [1],
+                                              [audio_length - self.sample_size, hp.num_freq],
+                                              [audio_length - self.sample_size, hp.num_mels]],
                                       name='input_queue')
         self.size = queue.size()
         self.capacity = hp.queue_size
@@ -129,8 +131,8 @@ class WavenetDataFeeder(object):
         linear = audio.spectrogram(wav).T
         mel = audio.melspectrogram(wav).T
 
-        linear = imresize(linear, size=(len(wav), linear.shape[1]))
-        mel = imresize(mel, size=(len(wav), mel.shape[1]))
+        linear = imresize(linear, size=(len(wav) - self.sample_size, linear.shape[1]))
+        mel = imresize(mel, size=(len(wav) - self.sample_size, mel.shape[1]))
 
         feed_dict = dict(zip(self._placeholders, (wav, speaker_id, linear, mel)))
         self._session.run(self._enqueue_op, feed_dict=feed_dict)
