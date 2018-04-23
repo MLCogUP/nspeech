@@ -18,11 +18,11 @@ def embedding(inputs, vocab_size, num_units, scope="embedding", reuse=None):
     return tf.nn.embedding_lookup(embd, inputs)  # [N, T_in, 256]
 
 
-def prenet(inputs, drop_rate, is_training, layer_sizes, scope="prenet", reuse=None):
+def prenet(inputs, drop_rate, is_training, layer_sizes, activation=tf.nn.relu, scope="prenet", reuse=None):
     x = inputs
     with tf.variable_scope(scope, reuse=reuse):
         for i, size in enumerate(layer_sizes):
-            dense = tf.layers.dense(x, units=size, activation=tf.nn.elu, name='dense_%d' % (i + 1))
+            dense = tf.layers.dense(x, units=size, activation=activation, name='dense_%d' % (i + 1))
             x = tf.layers.dropout(dense, rate=drop_rate, name='dropout_%d' % (i + 1))
     return x
 
@@ -105,13 +105,13 @@ def attention_decoder(inputs, num_units, input_lengths, is_training, speaker_emb
         return concat_cell
 
 
-def cbhg(inputs, input_lengths, speaker_embd=None, is_training=True,
+def cbhg(inputs, input_lengths, activation=tf.nn.relu, speaker_embd=None, is_training=True,
          K=16, c=(128, 128), gru_units=128, num_highways=4, scope="cbhg"):
     with tf.variable_scope(scope):
         with tf.variable_scope('conv_bank'):
             # Convolution bank: concatenate on the last axis to stack channels from all convolutions
             conv_outputs = tf.concat(
-                [conv1d(inputs, k, 128, tf.nn.elu, is_training, 'conv1d_%d' % k) for k in range(1, K + 1)],
+                [conv1d(inputs, k, 128, activation, is_training, 'conv1d_%d' % k) for k in range(1, K + 1)],
                 axis=-1
             )
 
@@ -119,7 +119,7 @@ def cbhg(inputs, input_lengths, speaker_embd=None, is_training=True,
         conv_bank = tf.layers.max_pooling1d(conv_outputs, pool_size=2, strides=1, padding='same')
 
         # Two projection layers:
-        conv_proj = conv1d(conv_bank, 3, c[0], tf.nn.elu, is_training, 'proj_1')
+        conv_proj = conv1d(conv_bank, 3, c[0], activation, is_training, 'proj_1')
         conv_proj = conv1d(conv_proj, 3, c[1], None, is_training, 'proj_2')
 
         # Residual connection:
@@ -161,10 +161,10 @@ def cbhg(inputs, input_lengths, speaker_embd=None, is_training=True,
         return encoded
 
 
-def highwaynet(inputs, scope="highway", reuse=False):
+def highwaynet(inputs, activation=tf.nn.relu, scope="highway", reuse=False):
     num_units = inputs.shape[-1]
     with tf.variable_scope(scope, reuse=reuse):
-        h = tf.layers.dense(inputs, units=num_units, activation=tf.nn.elu, name='H')
+        h = tf.layers.dense(inputs, units=num_units, activation=activation, name='H')
         t = tf.layers.dense(inputs, units=num_units, activation=tf.nn.sigmoid, name='T',
                             bias_initializer=tf.constant_initializer(-1.0))
         return h * t + inputs * (1.0 - t)

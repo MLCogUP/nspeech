@@ -106,6 +106,8 @@ def train(log_dir, args):
                     plot.plot_alignment(alignment, os.path.join(log_dir, 'step-{:06}-align.png'.format(step)),
                                         info='%s, %s, step=%d, loss=%.5f' % (
                                             args.model, time_string(), step, loss))
+                    plot.plot_wave(waveform, hparams.sample_rate, 'step-{:06}-wav.png'.format(step),
+                                   sequence_to_text(input_seq))
                     plot.plot_specgram(spectrogram, os.path.join(log_dir, 'step-{:06}-lin.png'.format(step)), "linear")
                     plot.plot_specgram(melgram, os.path.join(log_dir, 'step-{:06}-mel.png'.format(step)), "mel")
                     log('%s, %s, step=%d, loss=%.5f' % (args.model, time_string(), step, loss))

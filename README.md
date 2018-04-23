@@ -2,6 +2,13 @@
 
 An implementation of Tacotron speech synthesis in TensorFlow based on https://github.com/keithito/tacotron.
 
+
+## Datasets
+
+1. http://www.robots.ox.ac.uk/~vgg/data/voxceleb/
+2. https://keithito.com/LJ-Speech-Dataset/
+
+
 ## Quick Start
 
 ### Installing dependencies
