@@ -4,6 +4,7 @@ from tensorflow.contrib.seq2seq import BasicDecoder
 
 from neural_speech.models.utils.helpers import TacoTestHelper, TacoTrainingHelper
 from neural_speech.models.utils.modules import prenet, embedding, cbhg, attention_decoder
+from neural_speech.utils import audio
 from neural_speech.utils.infolog import log
 from neural_speech.utils.text.symbols import symbols
 
@@ -62,7 +63,7 @@ class Tacotron():
 
             # Attention Mechanism
             attention_cell = attention_decoder(encoder_outputs, hp.attention_dim, input_lengths, is_training,
-                                               speaker_embd=speaker_embd)
+                                               speaker_embd=speaker_embd, attention_type=hp.attention_type)
 
             # Decoder (layers specified bottom to top):
             decoder_cell = MultiRNNCell([
@@ -103,6 +104,7 @@ class Tacotron():
             self.input_lengths = input_lengths
             self.mel_outputs = mel_outputs
             self.linear_outputs = linear_outputs
+            self.audio = audio.inv_spectrogram_tensorflow(linear_outputs)
             self.alignments = alignments
             self.mel_targets = mel_targets
             self.linear_targets = linear_targets

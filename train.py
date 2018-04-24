@@ -97,16 +97,21 @@ def train(log_dir, args):
                     saver.save(sess, checkpoint_path, global_step=step)
                     log('Saving audio and alignment...')
                     # compute one example
-                    input_seq, spectrogram, melgram, alignment = sess.run([
-                        model.inputs[0], model.linear_outputs[0], model.mel_outputs[0], model.alignments[0]])
+                    input_seq, spectrogram, melgram, alignment, wav = sess.run([
+                        model.inputs[0], model.linear_outputs[0], model.mel_outputs[0], model.alignments[0],
+                        model.audio[0]])
                     # TODO: replace with gpu griffinlim impl
-                    waveform = audio.inv_spectrogram(spectrogram.T)
+                    # waveform = audio.inv_spectrogram(spectrogram.T)
+
+                    waveform = audio.inv_preemphasis(wav)
+                    waveform = waveform[:audio.find_endpoint(waveform)]
                     audio.save_wav(waveform, os.path.join(log_dir, 'step-{:06}-audio.wav'.format(step)))
                     # np.save(os.path.join(log_dir, 'step-%d-align.npy' % step), alignment)
                     plot.plot_alignment(alignment, os.path.join(log_dir, 'step-{:06}-align.png'.format(step)),
                                         info='%s, %s, step=%d, loss=%.5f' % (
                                             args.model, time_string(), step, loss))
-                    plot.plot_wave(waveform, hparams.sample_rate, 'step-{:06}-wav.png'.format(step),
+                    plot.plot_wave(waveform, hparams.sample_rate,
+                                   os.path.join(log_dir, 'step-{:06}-wav.png'.format(step)),
                                    sequence_to_text(input_seq))
                     plot.plot_specgram(spectrogram, os.path.join(log_dir, 'step-{:06}-lin.png'.format(step)), "linear")
                     plot.plot_specgram(melgram, os.path.join(log_dir, 'step-{:06}-mel.png'.format(step)), "mel")

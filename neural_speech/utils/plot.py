@@ -1,7 +1,8 @@
-import librosa.display
 import matplotlib
 
 matplotlib.use('Agg')
+
+import librosa.display
 import matplotlib.pyplot as plt
 
 

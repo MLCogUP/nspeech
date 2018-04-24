@@ -91,6 +91,7 @@ def attention_decoder(inputs, num_units, input_lengths, is_training, speaker_emb
         else:
             pre_mechanism_cell = GRUCell(num_units)
 
+        # bottleneck prenet as in paper
         pre_mechanism = neural_speech.models.utils.rnn_wrappers.PrenetWrapper(pre_mechanism_cell, [256, 128],
                                                                               is_training,
                                                                               speaker_embd=speaker_embd)
@@ -105,22 +106,42 @@ def attention_decoder(inputs, num_units, input_lengths, is_training, speaker_emb
         return concat_cell
 
 
+def conv1d_banks(inputs, K=16, activation=tf.nn.relu, is_training=True, scope="conv_bank", reuse=None):
+    '''Applies a series of conv1d separately.
+
+    Args:
+      inputs: A 3d tensor with shape of [N, T, C]
+      K: An int. The size of conv1d banks. That is,
+        The `inputs` are convolved with K filters: 1, 2, ..., K.
+      activation: a tf activation function
+      is_training: A boolean. This is passed to an argument of `bn`.
+      scope: Optional scope for `variable_scope`.
+      reuse: Boolean, whether to reuse the weights of a previous layer
+        by the same name.
+    Returns:
+      A 3d tensor with shape of [N, T, K*Hp.embed_size//2].
+    '''
+    with tf.variable_scope(scope, reuse=reuse):
+        # Convolution bank: concatenate on the last axis to stack channels from all convolutions
+        conv_outputs = tf.concat(
+            [conv1d(inputs, k, 128, activation, is_training, 'conv1d_%d' % k) for k in range(1, K + 1)],
+            axis=-1
+        )
+    return conv_outputs  # (N, T, Hp.embed_size//2*K)
+
+
 def cbhg(inputs, input_lengths, activation=tf.nn.relu, speaker_embd=None, is_training=True,
          K=16, c=(128, 128), gru_units=128, num_highways=4, scope="cbhg"):
     with tf.variable_scope(scope):
-        with tf.variable_scope('conv_bank'):
-            # Convolution bank: concatenate on the last axis to stack channels from all convolutions
-            conv_outputs = tf.concat(
-                [conv1d(inputs, k, 128, activation, is_training, 'conv1d_%d' % k) for k in range(1, K + 1)],
-                axis=-1
-            )
+        conv_bank = conv1d_banks(inputs, K=K, activation=activation, is_training=is_training)  # (N, T_x, K*E/2)
 
         # Maxpooling:
-        conv_bank = tf.layers.max_pooling1d(conv_outputs, pool_size=2, strides=1, padding='same')
+        conv_proj = tf.layers.max_pooling1d(conv_bank, pool_size=2, strides=1, padding='same')
 
-        # Two projection layers:
-        conv_proj = conv1d(conv_bank, 3, c[0], activation, is_training, 'proj_1')
-        conv_proj = conv1d(conv_proj, 3, c[1], None, is_training, 'proj_2')
+        # Projection layers:
+        for i, layer_size in enumerate(c[:-1]):
+            conv_proj = conv1d(conv_bank, 3, layer_size, activation, is_training, 'proj_{}'.format(i + 1))
+        conv_proj = conv1d(conv_proj, 3, c[-1], None, is_training, 'proj_{}'.format(len(c)))
 
         # Residual connection:
         highway_input = conv_proj + inputs
@@ -140,7 +161,7 @@ def cbhg(inputs, input_lengths, activation=tf.nn.relu, speaker_embd=None, is_tra
                     h = tf.concat([h, s], -1)
                 h = highwaynet(h)
 
-        # site specfic speaker embedding
+        # site specific speaker embedding
         if speaker_embd is not None:
             # TODO: what about two different s1, s2 for forwards and backwards
             s = tf.layers.dense(speaker_embd, gru_units, activation=tf.nn.softsign)
