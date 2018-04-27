@@ -736,7 +736,7 @@ class WaveNetModel(object):
                 self.learning_rate = _learning_rate_decay(hp.initial_learning_rate, global_step)
             else:
                 self.learning_rate = tf.convert_to_tensor(hp.initial_learning_rate)
-            optimizer = tf.train.AdamOptimizer(self.learning_rate, hp.adam_beta1, hp.adam_beta2)
+            optimizer = tf.train.AdamOptimizer(self.learning_rate, hp.adam["beta1"], hp.adam["beta2"])
             gradients, variables = zip(*optimizer.compute_gradients(self.loss))
             self.gradients = gradients
             clipped_gradients, _ = tf.clip_by_global_norm(gradients, gradient_clip)

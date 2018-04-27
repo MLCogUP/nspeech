@@ -149,7 +149,7 @@ class Tacotron2():
             # replace learning rate decay by exponential decay
             self.learning_rate = tf.train.exponential_decay(
                     hp.initial_learning_rate, global_step, hp.learning_rate_decay_halflife, 0.5)
-            optimizer = tf.train.AdamOptimizer(self.learning_rate, hp.adam_beta1, hp.adam_beta2)
+            optimizer = tf.train.AdamOptimizer(self.learning_rate, hp.adam["beta1"], hp.adam["beta2"])
             gradients, variables = zip(*optimizer.compute_gradients(self.loss))
             self.gradients = gradients
             clipped_gradients, _ = tf.clip_by_global_norm(gradients, gradient_clip)

@@ -2,7 +2,7 @@ import argparse
 import os
 import re
 
-from neural_speech.hparams import hparams, hparams_debug_string
+import neural_speech.hparams
 from neural_speech.synthesizer import Synthesizer
 from neural_speech.utils import plot, audio
 
@@ -27,9 +27,8 @@ def get_output_base_path(checkpoint_path):
     return os.path.join(base_dir, name)
 
 
-def run_eval(args):
-    print(hparams_debug_string())
-    synth = Synthesizer()
+def run_eval(args, hparams):
+    synth = Synthesizer(hparams)
     synth.load(args.checkpoint, args.model)
     base_path = get_output_base_path(args.checkpoint)
     simple_eval(args, synth, base_path)
@@ -71,8 +70,10 @@ def main():
     args = parser.parse_args()
     os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
     os.environ['CUDA_VISIBLE_DEVICES'] = str(args.gpu)  # added available gpu
+    hparams = neural_speech.hparams.load(args.model)
     hparams.parse(args.hparams)
-    run_eval(args)
+    neural_speech.hparams.debug_string(hparams)
+    run_eval(args, hparams)
 
 
 if __name__ == '__main__':

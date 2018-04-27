@@ -11,9 +11,10 @@ import numpy as np
 import tensorflow as tf
 
 import neural_speech.datasets.process
+import neural_speech.hparams
 from neural_speech.models.wavenet import mu_law_encode, mu_law_decode, WaveNetModel
-from train_wavenet import HPARAMS
 
+HPARAMS = neural_speech.hparams.load("wavenet")
 SAMPLES = 16000
 TEMPERATURE = 1.0
 LOGDIR = './logdir'

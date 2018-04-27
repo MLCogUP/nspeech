@@ -52,13 +52,13 @@ class Tacotron():
             prenet_outputs = prenet(inputs=embedded_inputs,
                                     drop_rate=hp.drop_rate if is_training else 0.0,
                                     is_training=is_training,
-                                    layer_sizes=[256, 128],
+                                    layer_sizes=hp.encoder_prenet,
                                     scope="prenet")  # [N, T_in, 128]
             encoder_outputs = cbhg(prenet_outputs, input_lengths,
                                    speaker_embd=speaker_embd,
                                    is_training=is_training,
-                                   K=hp.decoder_cbhg_banks,
-                                   c=[128, 128],  # [N, T_in, 256]
+                                   K=hp.encoder_cbhg_banks,
+                                   c=hp.encoder_cbhg_bank_sizes,  # [N, T_in, 256]
                                    scope='encoder_cbhg')
 
             # Attention Mechanism
@@ -93,7 +93,7 @@ class Tacotron():
                                 speaker_embd=None,
                                 is_training=is_training,
                                 K=hp.post_cbhg_banks,
-                                c=[256, hp.num_mels],
+                                c=hp.post_cbhg_bank_sizes + [hp.num_mels],
                                 scope='post_cbhg')  # [N, T_out, 256]
             linear_outputs = tf.layers.dense(post_outputs, hp.num_freq)  # [N, T_out, F]
 
@@ -128,7 +128,7 @@ class Tacotron():
             self.mel_loss = tf.reduce_mean(tf.abs(self.mel_targets - self.mel_outputs))
             l1 = tf.abs(self.linear_targets - self.linear_outputs)
             # Prioritize loss for frequencies under 3000 Hz.
-            n_priority_freq = int(2000 / (hp.sample_rate * 0.5) * hp.num_freq)
+            n_priority_freq = int(3000 / (hp.sample_rate * 0.5) * hp.num_freq)
             self.linear_loss = 0.5 * tf.reduce_mean(l1) + 0.5 * tf.reduce_mean(l1[:, :, 0:n_priority_freq])
             self.loss = self.mel_loss + self.linear_loss
 
@@ -144,7 +144,7 @@ class Tacotron():
                 self.learning_rate = _learning_rate_decay(hp.initial_learning_rate, global_step)
             else:
                 self.learning_rate = tf.convert_to_tensor(hp.initial_learning_rate)
-            optimizer = tf.train.AdamOptimizer(self.learning_rate, hp.adam_beta1, hp.adam_beta2)
+            optimizer = tf.train.AdamOptimizer(self.learning_rate, hp.adam["beta1"], hp.adam["beta2"])
             gradients, variables = zip(*optimizer.compute_gradients(self.loss))
             self.gradients = gradients
             clipped_gradients, _ = tf.clip_by_global_norm(gradients, gradient_clip)

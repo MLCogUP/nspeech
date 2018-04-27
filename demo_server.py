@@ -3,7 +3,7 @@ import os
 
 import falcon
 
-from neural_speech.hparams import hparams, hparams_debug_string
+import neural_speech.hparams
 from neural_speech.synthesizer import Synthesizer
 
 html_body = '''<html><title>Landing Page</title>
@@ -91,8 +91,9 @@ if __name__ == '__main__':
     args = parser.parse_args()
     os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
     os.environ['CUDA_VISIBLE_DEVICES'] = str(args.gpu)  # added available gpu
+    hparams = neural_speech.hparams.load(args.model)
     hparams.parse(args.hparams)
-    print(hparams_debug_string())
+    print(neural_speech.hparams.debug_string(hparams))
     synthesizer.load(args.checkpoint, args.model)
     print('Serving on port %d' % args.port)
     simple_server.make_server('0.0.0.0', args.port, api).serve_forever()

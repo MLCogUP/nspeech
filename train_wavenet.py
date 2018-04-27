@@ -6,69 +6,17 @@ import traceback
 
 import tensorflow as tf
 
+import neural_speech.hparams
 import neural_speech.models
 from neural_speech.datasets.WavenetDataFeeder import WavenetDataFeeder
 from neural_speech.utils import ValueWindow, infolog
 from neural_speech.utils.infolog import log
 from train import prepare_input_paths
 
-HPARAMS = tf.contrib.training.HParams(
-    # Comma-separated list of cleaners to run on text prior to training and eval. For non-English
-    # text, you may want to use "basic_cleaners" or "transliteration_cleaners" See TRAINING_DATA.md.
-    cleaners='english_cleaners',
-
-    # Audio:
-    num_mels=80,
-    num_freq=1025,  # 2048,
-    sample_rate=16000,  # 24000,
-    frame_length_ms=50,
-    frame_shift_ms=12.5,
-    preemphasis=0.97,
-    min_level_db=-100,
-    ref_level_db=20,
-
-    # custom
-    silence_threshold=0.1,
-
-    # Model:
-    outputs_per_step=5,
-    filter_width=2,
-    dilations_depth=5,
-    dilations_length=10,
-    residual_channels=32,
-    dilation_channels=32,
-    quantization_channels=256,
-    skip_channels=512,
-    use_biases=False,
-    scalar_input=False,
-    initial_filter_width=32,
-    gc_channels=16,  # speaker embedding size
-    gc_category_cardinality=276,  # maximum speaker id
-    lc_channels=80,
-    l2_regularization_strength=0,
-
-    # Training:
-    batch_size=1,
-    sample_size=1,  # TODO larger samples possible?
-    queue_size=32,  # number of batches stored in queue
-    min_dequeue_ratio=0,
-    adam_beta1=0.9,
-    adam_beta2=0.999,
-    initial_learning_rate=0.002,
-    learning_rate_decay_halflife=100000,
-    decay_learning_rate=True
-)
-
 tf_config = tf.ConfigProto(log_device_placement=False)
 
 
-def hparams_debug_string():
-    values = HPARAMS.values()
-    hp = ['  %s: %s' % (name, values[name]) for name in sorted(values)]
-    return 'Hyperparameters:\n' + '\n'.join(hp)
-
-
-def train_wavenet(log_dir, args):
+def train_wavenet(log_dir, args, hp):
     checkpoint_path = os.path.join(log_dir, 'model.ckpt')
 
     input_paths = prepare_input_paths(args)
@@ -76,8 +24,7 @@ def train_wavenet(log_dir, args):
     log('Checkpoint path: %s' % checkpoint_path)
     log('Loading training data from: %s' % input_paths)
     log('Using model: %s' % args.model)
-    log(hparams_debug_string())
-    hp = HPARAMS
+    log(neural_speech.hparams.debug_string(hp))
 
     with tf.Session(config=tf_config) as sess:
 
@@ -179,8 +126,9 @@ def main():
     log_dir = os.path.join(args.log_dir, run_name)
     os.makedirs(log_dir, exist_ok=True)
     infolog.init(os.path.join(log_dir, 'train.log'), run_name, args.slack_url)
+    HPARAMS = neural_speech.hparams.load("wavenet")
     HPARAMS.parse(args.hparams)
-    train_wavenet(log_dir, args)
+    train_wavenet(log_dir, args, HPARAMS)
 
 
 if __name__ == '__main__':

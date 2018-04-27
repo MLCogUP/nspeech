@@ -1,0 +1,19 @@
+outputs_per_step: 5
+embedding_dim: 256
+speaker_embed_dim: 16
+num_speakers: 1
+attention_type: "bah"  # bahdanau attention mechanism
+drop_rate: 0.5
+
+encoder_prenet:
+  - 256
+  - 128
+encoder_cbhg_banks: 16
+encoder_cbhg_bank_sizes:
+  - 128
+  - 128
+attention_dim: 256
+decoder_dim: 256
+post_cbhg_banks: 8
+post_cbhg_bank_sizes:
+  - 256

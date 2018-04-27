@@ -34,8 +34,8 @@ class DataFeeder(object):
         self.dump_status = 1
         self.id2speaker = {}
 
-        if os.path.isfile("/cache/data.joblib"):
-            self.processed_data = joblib.load("/cache/data.joblib")
+        # if os.path.isfile("/cache/data.joblib"):
+        #     self.processed_data = joblib.load("/cache/data.joblib")
 
         self._data_items = []
 

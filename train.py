@@ -7,8 +7,8 @@ import traceback
 import joblib
 import tensorflow as tf
 
+import neural_speech.hparams
 from neural_speech.datasets.datafeeder import DataFeeder
-from neural_speech.hparams import hparams, hparams_debug_string
 from neural_speech.models import create_model
 from neural_speech.utils import audio, ValueWindow, plot, time_string, infolog
 from neural_speech.utils.infolog import log
@@ -27,7 +27,7 @@ def prepare_input_paths(args):
     return input_paths
 
 
-def train(log_dir, args):
+def train(log_dir, args, hparams):
     checkpoint_path = os.path.join(log_dir, 'model.ckpt')
 
     input_paths = prepare_input_paths(args)
@@ -35,7 +35,7 @@ def train(log_dir, args):
     log('Checkpoint path: %s' % checkpoint_path)
     log('Loading training data from: %s' % input_paths)
     log('Using model: %s' % args.model)
-    log(hparams_debug_string())
+    log(neural_speech.hparams.debug_string(hparams))
 
     with tf.Session() as sess:
         # Set up DataFeeder:
@@ -118,9 +118,11 @@ def train(log_dir, args):
                     log('%s, %s, step=%d, loss=%.5f' % (args.model, time_string(), step, loss))
                     log('Input: %s' % sequence_to_text(input_seq))
 
+                    # TODO remove feeder dump - replace by separate preprocessor again - also h5py!
                     # dumps feeder iff no changes are recognized
                     if feeder.dump_status == 2:
                         joblib.dump(feeder.processed_data, "/cache/data.joblib", compress=0)
+                        feeder.dump_status = 3
 
         except Exception as e:
             log('Exiting due to exception: %s' % e, slack=True)
@@ -136,7 +138,7 @@ def main():
     parser.add_argument('--ljspeech', default='', help="Related to preprocessed wav files")
     parser.add_argument('--librispeech', default='', help="Related to raw flac files (big corpus)")
 
-    parser.add_argument('--model', default='tacotron')
+    parser.add_argument('--model', default='taco1')
     parser.add_argument('--name', help='Name of the run. Used for logging. Defaults to model name.')
     parser.add_argument('--hparams', default='',
                         help='Hyperparameter overrides as a comma-separated list of name=value pairs')
@@ -157,8 +159,9 @@ def main():
     log_dir = os.path.join(args.log_dir, run_name)
     os.makedirs(log_dir, exist_ok=True)
     infolog.init(os.path.join(log_dir, 'train.log'), run_name, args.slack_url)
+    hparams = neural_speech.hparams.load(args.model)
     hparams.parse(args.hparams)
-    train(log_dir, args)
+    train(log_dir, args, hparams)
 
 
 if __name__ == '__main__':
