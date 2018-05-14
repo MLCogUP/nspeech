@@ -1,12 +1,10 @@
-# Tacotron
+# Neural Speech Project
 
-An implementation of Tacotron speech synthesis in TensorFlow based on https://github.com/keithito/tacotron.
-
-
-## Datasets
-
-1. http://www.robots.ox.ac.uk/~vgg/data/voxceleb/
-2. https://keithito.com/LJ-Speech-Dataset/
+The nspeech git repository is a collection of neural models for speech synthesis and neural vocoder.
+It serves implementations of the following models:
+- Tacotron
+- Tacotron 2
+- Wavenet
 
 
 ## Quick Start
@@ -15,83 +13,36 @@ An implementation of Tacotron speech synthesis in TensorFlow based on https://gi
 
 1. Install Python 3.
 
-2. Install the latest version of [TensorFlow](https://www.tensorflow.org/install/) for your platform. For better
-   performance, install with GPU support if it's available. This code works with TensorFlow 1.3 or 1.4.
-
-3. Install requirements:
+2. Install requirements:
    ```
    pip install -r requirements.txt
    ```
 
-
-### Using a pre-trained model
-
-1. **Download and unpack a model**:
-   ```
-   curl http://data.keithito.com/data/speech/tacotron-20170720.tar.bz2 | tar xjC /tmp
-   ```
-
-2. **Run the demo server**:
-   ```
-   python3 demo_server.py --checkpoint /tmp/tacotron-20170720/model.ckpt
-   ```
-
-3. **Point your browser at localhost:9000**
-   * Type what you want to synthesize
-
-
-
 ### Training
 
-*Note: you need at least 40GB of free disk space to train a model.*
+*Note: you need at least 50GB memory for the data to train a model.*
 
-1. **Download a speech dataset.**
+1. **Download and prepare datasets (if necessary) for training**
 
-   The following are supported out of the box:
-    * [LJ Speech](https://keithito.com/LJ-Speech-Dataset/) (Public Domain)
-    * [Blizzard 2012](http://www.cstr.ed.ac.uk/projects/blizzard/2012/phase_one) (Creative Commons Attribution Share-Alike)
-
-   You can use other datasets if you convert them to the right format. See [TRAINING_DATA.md](TRAINING_DATA.md) for more info.
-
-
-2. **Unpack the dataset into `~/tacotron`**
-
-   After unpacking, your tree should look like this for LJ Speech:
+4. **Train TTS model (tacotron 1 and 2)**
    ```
-   tacotron
-     |- LJSpeech-1.0
-         |- metadata.csv
-         |- wavs
+   python3 train.py --ljspeech /data/LJSpeech-1.0/ --model taco1
    ```
-
-   or like this for Blizzard 2012:
-   ```
-   tacotron
-     |- Blizzard2012
-         |- ATrampAbroad
-         |   |- sentence_index.txt
-         |   |- lab
-         |   |- wav
-         |- TheManThatCorruptedHadleyburg
-             |- sentence_index.txt
-             |- lab
-             |- wav
-   ```
-
-3. **Preprocess the data**
-   ```
-   python3 preprocess.py --dataset ljspeech
-   ```
-     * Use `--dataset blizzard` for Blizzard data
-
-4. **Train a model**
-   ```
-   python3 train.py
-   ```
-
-   Tunable hyperparameters are found in [hparams.py](neural_speech/hparams.py). You can adjust these at the command
+   1. Select a graphics card by using `--gpu x` and the number of threads processing the data with `--threads y`
+   
+   2. To store summaries and checkpoints, set `--summary_interval x` and `--checkpoint_interval y`
+   
+   3. Tunable hyperparameters are found in the yaml files within the configs folder. You can adjust these at the command
    line using the `--hparams` flag, for example `--hparams="batch_size=16,outputs_per_step=2"`.
    Hyperparameters should generally be set to the same values at both training and eval time.
+
+4. **Train neural vocoder model (wavenet)**
+   Data processing differs compared with TTS training.
+   ```
+   python3 train_wavenet.py --ljspeech /data/LJSpeech-1.0/ --model simple_wavenet
+   ```
+   
+
 
 
 5. **Monitor with Tensorboard** (optional)
@@ -99,8 +50,7 @@ An implementation of Tacotron speech synthesis in TensorFlow based on https://gi
    tensorboard --logdir ~/tacotron/logs-tacotron
    ```
 
-   The trainer dumps audio and alignments every 1000 steps. You can find these in
-   `~/tacotron/logs-tacotron`.
+   The trainer dumps audio and plots (alignment, wave, spectrogram) every 1000 steps (default). The are stored in the `log-dir`.
 
 6. **Synthesize from a checkpoint**
    ```
@@ -117,17 +67,10 @@ An implementation of Tacotron speech synthesis in TensorFlow based on https://gi
 
 ## Notes and Common Issues
 
-  * [TCMalloc](http://goog-perftools.sourceforge.net/doc/tcmalloc.html) seems to improve
-    training speed and avoids occasional slowdowns seen with the default allocator. You
-    can enable it by installing it and setting `LD_PRELOAD=/usr/lib/libtcmalloc.so`.
-
   * You can train with [CMUDict](http://www.speech.cs.cmu.edu/cgi-bin/cmudict) by downloading the
     dictionary to ~/tacotron/training and then passing the flag `--hparams="use_cmudict=True"` to
     train.py. This will allow you to pass ARPAbet phonemes enclosed in curly braces at eval
     time to force a particular pronunciation, e.g. `Turn left on {HH AW1 S S T AH0 N} Street.`
-
-  * If you pass a Slack incoming webhook URL as the `--slack_url` flag to train.py, it will send
-    you progress updates every 1000 steps.
 
   * Occasionally, you may see a spike in loss and the model will forget how to attend (the
     alignments will no longer make sense). Although it will recover eventually, it may
@@ -147,6 +90,7 @@ An implementation of Tacotron speech synthesis in TensorFlow based on https://gi
     train.py (replace "300" with a value based on how long your audio is and the formula above).
 
 
-## Other Implementations
+## Other Implementations that influence this repository
+  * By Keitho: https://github.com/keithito/tacotron
   * By Alex Barron: https://github.com/barronalex/Tacotron
   * By Kyubyong Park: https://github.com/Kyubyong/tacotron
