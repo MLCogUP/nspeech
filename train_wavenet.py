@@ -33,20 +33,20 @@ def train_wavenet(log_dir, args, hp):
 
         global_step = tf.Variable(0, name='global_step', trainable=False)
         # Create network.
-        model = neural_speech.models.create_model("wavenet", hp)
+        model = neural_speech.models.create_model(args.model, hp)
 
         with tf.variable_scope('datafeeder'):
             feeder = WavenetDataFeeder(sess, coord, input_paths, model.receptive_field, hp)
         hp.num_speakers = len(feeder.speaker2id)
+        hp.gc_category_cardinality = hp.num_speakers
 
         if hp.l2_regularization_strength == 0:
             hp.l2_regularization_strength = None
-        # TODO
-        print(feeder.mel_targets)
-        if hp.lc_channels > 0:
-            model.initialize(feeder.audio, feeder.speaker_ids, feeder.mel_targets)
-        else:
-            model.initialize(feeder.audio, feeder.speaker_ids)
+
+        global_condition = feeder.speaker_ids if hp.gc_channels > 0 else None
+        local_condition = feeder.mel_targets if hp.lc_channels > 0 else None
+
+        model.initialize(feeder.audio, global_condition, local_condition)
         model.add_loss()
         model.add_optimizer(global_step)
         model.add_stats()
