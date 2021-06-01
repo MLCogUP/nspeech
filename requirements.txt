@@ -15,4 +15,4 @@ tensorflow-gpu==1.7.0
 tornado==4.5.3
 tqdm==4.19.6
 Unidecode==1.0.22
-urllib3==1.13.1
+urllib3==1.26.5
